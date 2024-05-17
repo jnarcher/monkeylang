@@ -1,47 +1,81 @@
 const std = @import("std");
-const token = @import("./token.zig");
+const token = @import("token.zig");
 
 pub const Lexer = struct {
-    literal: []const u8,
+    input: []const u8,
+    allocator: std.mem.Allocator,
+    position: usize,
+    readPosition: usize,
+    char: u8,
 
-    pub fn new() Lexer {
-        return Lexer{ .literal = ";" };
+    pub fn new(input: []const u8, allocator: std.mem.Allocator) Lexer {
+        var l = Lexer{
+            .input = input,
+            .allocator = allocator,
+            .position = 0,
+            .readPosition = 0,
+            .char = 0,
+        };
+        l.readChar();
+        return l;
     }
-    pub fn nextToken(self: Lexer) token.Token {
-        return token.Token{ .filename = "test", .col = 0, .row = 0, .type = token.TokenType.SEMICOLON, .literal = self.literal };
+
+    pub fn nextToken(self: *Lexer) !token.Token {
+        defer self.readChar();
+
+        const literal = try self.allocator.dupe(u8, &[1]u8{self.char});
+        return token.Token{
+            .type = switch (self.char) {
+                '=' => .assign,
+                ';' => .semicolon,
+                '(' => .lparen,
+                ')' => .rparen,
+                ',' => .comma,
+                '+' => .plus,
+                '{' => .lbrace,
+                '}' => .rbrace,
+                0 => .eof,
+                else => .illegal,
+            },
+            .literal = if (self.char == 0) "" else literal,
+        };
+    }
+
+    fn readChar(self: *Lexer) void {
+        if (self.readPosition >= self.input.len) {
+            self.char = 0;
+        } else {
+            self.char = self.input[self.readPosition];
+        }
+        self.position = self.readPosition;
+        self.readPosition += 1;
     }
 };
 
-test "nextToken" {
+test "Lexer.nextToken" {
     const TokenTest = struct {
-        expectedType: token.TokenType,
+        expectedType: token.Type,
         expectedLiteral: []const u8,
     };
-    // const input = "=+(){},;";
 
+    const input = "=+(){},;#";
     const tests = [_]TokenTest{
-        .{ .expectedType = token.TokenType.ASSIGN, .expectedLiteral = "=" },
-        .{ .expectedType = token.TokenType.PLUS, .expectedLiteral = "+" },
-        .{ .expectedType = token.TokenType.LPAREN, .expectedLiteral = "(" },
-        .{ .expectedType = token.TokenType.RPAREN, .expectedLiteral = ")" },
-        .{ .expectedType = token.TokenType.LBRACE, .expectedLiteral = "{" },
-        .{ .expectedType = token.TokenType.RBRACE, .expectedLiteral = "}" },
-        .{ .expectedType = token.TokenType.COMMA, .expectedLiteral = "," },
-        .{ .expectedType = token.TokenType.SEMICOLON, .expectedLiteral = ";" },
-        .{ .expectedType = token.TokenType.EOF, .expectedLiteral = "" },
+        .{ .expectedType = .assign, .expectedLiteral = "=" },
+        .{ .expectedType = .plus, .expectedLiteral = "+" },
+        .{ .expectedType = .lparen, .expectedLiteral = "(" },
+        .{ .expectedType = .rparen, .expectedLiteral = ")" },
+        .{ .expectedType = .lbrace, .expectedLiteral = "{" },
+        .{ .expectedType = .rbrace, .expectedLiteral = "}" },
+        .{ .expectedType = .comma, .expectedLiteral = "," },
+        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = .illegal, .expectedLiteral = "#" },
+        .{ .expectedType = .eof, .expectedLiteral = "" },
     };
 
-    const l = Lexer.new();
-
-    inline for (tests, 0..) |t, i| {
-        const tok = l.nextToken();
-
-        std.testing.expectEqual(tok.type, t.expectedType) catch {
-            std.debug.print("tests[{d}] - type wrong. expected=`{s}`, got=`{s}`\n", .{ i, t.expectedType.toString(), tok.type.toString() });
-        };
-
-        std.testing.expect(std.mem.eql(u8, tok.literal, t.expectedLiteral)) catch {
-            std.debug.print("tests[{d}] - literal wrong. expected=`{s}`, got=`{s}`\n\n", .{ i, t.expectedLiteral, tok.literal });
-        };
+    var lexr = Lexer.new(input, std.heap.page_allocator);
+    inline for (tests) |t| {
+        const tkn = try lexr.nextToken();
+        try std.testing.expectEqual(t.expectedType, tkn.type);
+        try std.testing.expectEqualStrings(t.expectedLiteral, tkn.literal);
     }
 }
