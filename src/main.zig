@@ -1,5 +1,6 @@
 const std = @import("std");
-const lexer = @import("./lexer.zig");
-const token = @import("./token.zig");
+const repl = @import("./repl.zig");
 
-pub fn main() !void {}
+pub fn main() !void {
+    try repl.start(std.heap.page_allocator);
+}
