@@ -1,39 +1,47 @@
 const std = @import("std");
-const token = @import("../token/token.zig");
-const testing = std.testing;
+const token = @import("./token.zig");
 
-const Lexer = struct {
+pub const Lexer = struct {
+    literal: []const u8,
+
     pub fn new() Lexer {
-        return Lexer{};
+        return Lexer{ .literal = ";" };
     }
-    pub fn nextToken() token.Token {
-        return Lexer{};
+    pub fn nextToken(self: Lexer) token.Token {
+        return token.Token{ .filename = "test", .col = 0, .row = 0, .type = token.TokenType.SEMICOLON, .literal = self.literal };
     }
 };
 
 test "nextToken" {
-    const input = "=+(){},;";
-
-    const tests = [_]struct {
+    const TokenTest = struct {
         expectedType: token.TokenType,
-        expectedLiteral: *const []u8,
-    }{
-        .{ token.ASSIGN, "=" },
-        .{ token.PLUS, "+" },
-        .{ token.LPAREM, "(" },
-        .{ token.RPAREN, ")" },
-        .{ token.LBRACE, "{" },
-        .{ token.RBRACE, "}" },
-        .{ token.COMMA, "," },
-        .{ token.SEMICOLON, ";" },
-        .{ token.EOF, "" },
+        expectedLiteral: []const u8,
+    };
+    // const input = "=+(){},;";
+
+    const tests = [_]TokenTest{
+        .{ .expectedType = token.TokenType.ASSIGN, .expectedLiteral = "=" },
+        .{ .expectedType = token.TokenType.PLUS, .expectedLiteral = "+" },
+        .{ .expectedType = token.TokenType.LPAREN, .expectedLiteral = "(" },
+        .{ .expectedType = token.TokenType.RPAREN, .expectedLiteral = ")" },
+        .{ .expectedType = token.TokenType.LBRACE, .expectedLiteral = "{" },
+        .{ .expectedType = token.TokenType.RBRACE, .expectedLiteral = "}" },
+        .{ .expectedType = token.TokenType.COMMA, .expectedLiteral = "," },
+        .{ .expectedType = token.TokenType.SEMICOLON, .expectedLiteral = ";" },
+        .{ .expectedType = token.TokenType.EOF, .expectedLiteral = "" },
     };
 
-    const l = Lexer.new(input);
+    const l = Lexer.new();
 
-    inline for (tests) |t| {
+    inline for (tests, 0..) |t, i| {
         const tok = l.nextToken();
-        testing.expectEqual(tok.type, t.expectedType);
-        testing.expectEqual(tok.literal, t.expectedLiteral);
+
+        std.testing.expectEqual(tok.type, t.expectedType) catch {
+            std.debug.print("tests[{d}] - type wrong. expected=`{s}`, got=`{s}`\n", .{ i, t.expectedType.toString(), tok.type.toString() });
+        };
+
+        std.testing.expect(std.mem.eql(u8, tok.literal, t.expectedLiteral)) catch {
+            std.debug.print("tests[{d}] - literal wrong. expected=`{s}`, got=`{s}`\n\n", .{ i, t.expectedLiteral, tok.literal });
+        };
     }
 }

@@ -1,5 +1,13 @@
 const std = @import("std");
+const lexer = @import("./lexer.zig");
 
 pub fn main() !void {
-    std.debug.print("Hello world!\n", .{});
+    const l = lexer.Lexer.new();
+    const tkn = l.nextToken();
+
+    std.debug.print("{s}", .{tkn.literal});
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

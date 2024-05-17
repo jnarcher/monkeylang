@@ -1,34 +1,43 @@
-const TokenType = enum {};
+pub const TokenType = enum {
+    ILLEGAL,
+    EOF,
+    IDENT,
+    INT,
+    ASSIGN,
+    PLUS,
+    COMMA,
+    SEMICOLON,
+    LPAREN,
+    RPAREN,
+    LBRACE,
+    RBRACE,
+    FUNCTION,
+    LET,
 
-const Token = struct {
-    type: TokenType,
-    literal: *const []u8,
-    // metadata
-    col: u8,
-    row: u8,
-    filename: *const []u8,
+    pub fn toString(self: TokenType) []const u8 {
+        switch (self) {
+            TokenType.ILLEGAL => return "ILLEGAL",
+            TokenType.EOF => return "EOF",
+            TokenType.IDENT => return "IDENT",
+            TokenType.INT => return "INT",
+            TokenType.ASSIGN => return "=",
+            TokenType.PLUS => return "+",
+            TokenType.COMMA => return ",",
+            TokenType.SEMICOLON => return ";",
+            TokenType.LPAREN => return "(",
+            TokenType.RPAREN => return ")",
+            TokenType.LBRACE => return "{",
+            TokenType.RBRACE => return "}",
+            TokenType.FUNCTION => return "FUNCTION",
+            TokenType.LET => return "LET",
+        }
+    }
 };
 
-const ILLEGAL = "ILLEGAL";
-const EOF = "EOF";
-
-// Identifiers + literals
-const IDENT = "IDENT"; // add, foobar, x, y, ...
-const INT = "INT"; // 123123094
-
-// Operators
-const ASSIGN = "=";
-const PLUS = "+";
-
-// Delimiters
-const COMMA = ",";
-const SEMICOLON = ";";
-
-const LPAREN = "(";
-const RPAREN = ")";
-const LBRACE = "{";
-const RBRACE = "}";
-
-// Keywords
-const FUNCTION = "FUNCTION";
-const LET = "LET";
+pub const Token = struct {
+    type: TokenType,
+    literal: []const u8,
+    col: u8,
+    row: u8,
+    filename: []const u8,
+};
