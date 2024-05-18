@@ -45,10 +45,6 @@ pub const Lexer = struct {
         return tkn;
     }
 
-    fn skipWhitespace(self: *Self) void {
-        while (std.ascii.isWhitespace(self.ch)) : (self.readChar()) {}
-    }
-
     fn readChar(self: *Self) void {
         if (self.readPosition >= self.input.len) {
             self.ch = 0;
@@ -70,6 +66,12 @@ pub const Lexer = struct {
         const position = self.position;
         while (isValid(self.ch)) : (self.readChar()) {}
         return self.input[position..self.position];
+    }
+
+    /// Read any whitespace characters until a non-whitespace
+    /// character is found.
+    fn skipWhitespace(self: *Self) void {
+        _ = self.readMany(std.ascii.isWhitespace);
     }
 
     /// Read the next character if `c1 == c2`.
