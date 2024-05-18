@@ -1,90 +1,75 @@
 const std = @import("std");
-const token = @import("token.zig");
+const Token = @import("token.zig").Token;
 
 pub const Lexer = struct {
-    input: []const u8,
     allocator: std.mem.Allocator,
+    input: []const u8,
     position: usize,
     readPosition: usize,
     ch: u8,
 
-    pub fn new(input: []const u8, allocator: std.mem.Allocator) Lexer {
-        var l = Lexer{
-            .input = input,
-            .allocator = allocator,
-            .position = 0,
-            .readPosition = 0,
-            .ch = 0,
-        };
-        l.readChar();
-        return l;
-    }
-
-    pub fn nextToken(self: *Lexer) !token.Token {
+    pub fn nextToken(self: *Lexer) !Token {
         self.skipWhitespace();
-
-        const tkn: token.Token = switch (self.ch) {
+        const tkn: Token = switch (self.ch) {
             '=' => blk: {
                 const peek = self.peekChar();
                 if (peek == '=') {
                     self.readChar();
-                    break :blk .{
-                        .type = .equal,
-                        .literal = "==",
-                    };
-                } else {
-                    break :blk .{
-                        .type = .assign,
-                        .literal = "=",
-                    };
+                    break :blk .eq;
                 }
+                break :blk .assign;
             },
             '!' => blk: {
                 const peek = self.peekChar();
                 if (peek == '=') {
                     self.readChar();
-                    break :blk .{
-                        .type = .not_equal,
-                        .literal = "!=",
-                    };
-                } else {
-                    break :blk .{
-                        .type = .bang,
-                        .literal = "!",
-                    };
+                    break :blk .not_eq;
                 }
+                break :blk .bang;
             },
-            '+' => .{ .type = .plus, .literal = "+" },
-            '-' => .{ .type = .minus, .literal = "-" },
-            '*' => .{ .type = .asterisk, .literal = "*" },
-            '/' => .{ .type = .slash, .literal = "/" },
-            '<' => .{ .type = .less_than, .literal = "<" },
-            '>' => .{ .type = .greater_than, .literal = ">" },
-            ',' => .{ .type = .comma, .literal = "," },
-            '(' => .{ .type = .paren_l, .literal = "(" },
-            ')' => .{ .type = .paren_r, .literal = ")" },
-            '{' => .{ .type = .brace_l, .literal = "{" },
-            '}' => .{ .type = .brace_r, .literal = "}" },
-            ';' => .{ .type = .semicolon, .literal = ";" },
-            0 => .{ .type = .eof, .literal = "EOF" },
+            '<' => blk: {
+                const peek = self.peekChar();
+                if (peek == '=') {
+                    self.readChar();
+                    break :blk .le;
+                }
+                break :blk .lt;
+            },
+            '>' => blk: {
+                const peek = self.peekChar();
+                if (peek == '=') {
+                    self.readChar();
+                    break :blk .ge;
+                }
+                break :blk .gt;
+            },
+            '+' => .plus,
+            '-' => .minus,
+            '*' => .asterisk,
+            '/' => .slash,
+            ',' => .comma,
+            '(' => .lparen,
+            ')' => .rparen,
+            '{' => .lsquirley,
+            '}' => .rsquirley,
+            ';' => .semicolon,
+            0 => .eof,
             else => blk: {
-                if (isLetter(self.ch)) { // IDENTIFIERS & KEYWORDS
-                    var tkn = token.Token{
-                        .type = undefined,
-                        .literal = try self.readMultipleChars(isLetter),
-                    };
-                    tkn.type = token.lookupIdent(tkn.literal);
-                    return tkn;
-                } else if (isDigit(self.ch)) { // NUMBERS
-                    return .{
-                        .type = .int,
-                        .literal = try self.readMultipleChars(isDigit),
-                    };
+                // Identifiers and keywords
+                if (isLetter(self.ch)) {
+                    const word = try self.readMultipleChars(isLetter);
+                    return Token.keyword(word) orelse Token{ .ident = word };
                 }
 
-                break :blk .{
-                    .type = .illegal,
-                    .literal = try self.allocator.dupe(u8, &[1]u8{self.ch}),
+                // Numbers
+                if (isDigit(self.ch)) {
+                    const numStr = try self.readMultipleChars(isDigit);
+                    return Token{ .int = numStr };
+                }
+
+                // Illegal character
+                break :blk Token{
+                    .illegal = try self.allocator.dupe(u8, &[1]u8{self.ch}),
                 };
             },
         };
@@ -94,7 +79,7 @@ pub const Lexer = struct {
     }
 
     fn skipWhitespace(self: *Lexer) void {
-        while (self.ch == ' ' or self.ch == '\t' or self.ch == '\n' or self.ch == '\r') : (self.readChar()) {}
+        while (std.ascii.isWhitespace(self.ch)) : (self.readChar()) {}
     }
 
     fn readChar(self: *Lexer) void {
@@ -107,6 +92,7 @@ pub const Lexer = struct {
         self.readPosition += 1;
     }
 
+    /// Look ahead one character without advancing the lexer position.
     fn peekChar(self: Lexer) u8 {
         return if (self.readPosition >= self.input.len) 0 else self.input[self.readPosition];
     }
@@ -120,149 +106,181 @@ pub const Lexer = struct {
     }
 };
 
-fn isLetter(ch: u8) bool {
-    return ('a' <= ch and ch <= 'z') or ('A' <= ch and ch <= 'Z') or (ch == '_');
+pub fn init(input: []const u8, allocator: std.mem.Allocator) Lexer {
+    var l = Lexer{
+        .allocator = allocator,
+        .input = input,
+        .position = 0,
+        .readPosition = 0,
+        .ch = 0,
+    };
+    l.readChar();
+    return l;
 }
 
-fn isDigit(ch: u8) bool {
-    return '0' <= ch and ch <= '9';
+fn isLetter(c: u8) bool {
+    return std.ascii.isAlphabetic(c) or 'c' == '_';
+}
+
+fn isDigit(c: u8) bool {
+    return std.ascii.isDigit(c);
 }
 
 test "nextToken" {
-    const TokenTest = struct {
-        expectedType: token.Type,
-        expectedLiteral: []const u8,
-    };
+    var input: []const u8 = undefined;
 
-    const input =
+    input =
         \\let five = 5;
         \\let ten = 10;
-        \\
+    ;
+    var tests_assignment = [_]Token{
+        .let,
+        .{ .ident = "five" },
+        .assign,
+        .{ .int = "5" },
+        .semicolon,
+        .let,
+        .{ .ident = "ten" },
+        .assign,
+        .{ .int = "10" },
+        .semicolon,
+        .eof,
+    };
+    try runTest(input, tests_assignment[0..], "ASSIGNMENT");
+
+    input =
         \\let add = fn(x, y) {
         \\  x + y;
         \\};
         \\
         \\let result = add(five, ten);
+    ;
+    var tests_function = [_]Token{
+        .let,
+        .{ .ident = "add" },
+        .assign,
+        .function,
+        .lparen,
+        .{ .ident = "x" },
+        .comma,
+        .{ .ident = "y" },
+        .rparen,
+        .lsquirley,
+        .{ .ident = "x" },
+        .plus,
+        .{ .ident = "y" },
+        .semicolon,
+        .rsquirley,
+        .semicolon,
+        .let,
+        .{ .ident = "result" },
+        .assign,
+        .{ .ident = "add" },
+        .lparen,
+        .{ .ident = "five" },
+        .comma,
+        .{ .ident = "ten" },
+        .rparen,
+        .semicolon,
+        .eof,
+    };
+    try runTest(input, tests_function[0..], "FUNCTIONS");
+
+    input =
         \\!-/*5;
         \\5 < 10 > 5;
-        \\
+    ;
+    var tests_random = [_]Token{
+        .bang,
+        .minus,
+        .slash,
+        .asterisk,
+        .{ .int = "5" },
+        .semicolon,
+        .{ .int = "5" },
+        .lt,
+        .{ .int = "10" },
+        .gt,
+        .{ .int = "5" },
+        .semicolon,
+        .eof,
+    };
+    try runTest(input, tests_random[0..], "RANDOM");
+
+    input =
         \\if (5 < 10) {
         \\  return true;
         \\} else {
         \\  return false;
         \\}
-        \\
+    ;
+    var tests_if = [_]Token{
+        ._if,
+        .lparen,
+        .{ .int = "5" },
+        .lt,
+        .{ .int = "10" },
+        .rparen,
+        .lsquirley,
+        ._return,
+        .true,
+        .semicolon,
+        .rsquirley,
+        ._else,
+        .lsquirley,
+        ._return,
+        .false,
+        .semicolon,
+        .rsquirley,
+        .eof,
+    };
+    try runTest(input, tests_if[0..], "IF STATEMENT");
+
+    input =
         \\10 == 10;
         \\10 != 9;
+        \\10 <= 11;
+        \\10 >= 3;
     ;
-
-    const tests = [_]TokenTest{
-        // let five = 5;
-        .{ .expectedType = .let, .expectedLiteral = "let" },
-        .{ .expectedType = .identifier, .expectedLiteral = "five" },
-        .{ .expectedType = .assign, .expectedLiteral = "=" },
-        .{ .expectedType = .int, .expectedLiteral = "5" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        // let ten = 10;
-        .{ .expectedType = .let, .expectedLiteral = "let" },
-        .{ .expectedType = .identifier, .expectedLiteral = "ten" },
-        .{ .expectedType = .assign, .expectedLiteral = "=" },
-        .{ .expectedType = .int, .expectedLiteral = "10" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        // let add = fn(x, y) { x + y; };
-        .{ .expectedType = .let, .expectedLiteral = "let" },
-        .{ .expectedType = .identifier, .expectedLiteral = "add" },
-        .{ .expectedType = .assign, .expectedLiteral = "=" },
-        .{ .expectedType = .function, .expectedLiteral = "fn" },
-        .{ .expectedType = .paren_l, .expectedLiteral = "(" },
-        .{ .expectedType = .identifier, .expectedLiteral = "x" },
-        .{ .expectedType = .comma, .expectedLiteral = "," },
-        .{ .expectedType = .identifier, .expectedLiteral = "y" },
-        .{ .expectedType = .paren_r, .expectedLiteral = ")" },
-        .{ .expectedType = .brace_l, .expectedLiteral = "{" },
-        .{ .expectedType = .identifier, .expectedLiteral = "x" },
-        .{ .expectedType = .plus, .expectedLiteral = "+" },
-        .{ .expectedType = .identifier, .expectedLiteral = "y" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = .brace_r, .expectedLiteral = "}" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        // let result = add(five, ten);
-        .{ .expectedType = .let, .expectedLiteral = "let" },
-        .{ .expectedType = .identifier, .expectedLiteral = "result" },
-        .{ .expectedType = .assign, .expectedLiteral = "=" },
-        .{ .expectedType = .identifier, .expectedLiteral = "add" },
-        .{ .expectedType = .paren_l, .expectedLiteral = "(" },
-        .{ .expectedType = .identifier, .expectedLiteral = "five" },
-        .{ .expectedType = .comma, .expectedLiteral = "," },
-        .{ .expectedType = .identifier, .expectedLiteral = "ten" },
-        .{ .expectedType = .paren_r, .expectedLiteral = ")" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        // !-/*5;
-        .{ .expectedType = .bang, .expectedLiteral = "!" },
-        .{ .expectedType = .minus, .expectedLiteral = "-" },
-        .{ .expectedType = .slash, .expectedLiteral = "/" },
-        .{ .expectedType = .asterisk, .expectedLiteral = "*" },
-        .{ .expectedType = .int, .expectedLiteral = "5" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        // 5 < 10 > 5;
-        .{ .expectedType = .int, .expectedLiteral = "5" },
-        .{ .expectedType = .less_than, .expectedLiteral = "<" },
-        .{ .expectedType = .int, .expectedLiteral = "10" },
-        .{ .expectedType = .greater_than, .expectedLiteral = ">" },
-        .{ .expectedType = .int, .expectedLiteral = "5" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        // if (5 < 10) {
-        //   return true;
-        // } else {
-        //   return false;
-        // }
-        .{ .expectedType = ._if, .expectedLiteral = "if" },
-        .{ .expectedType = .paren_l, .expectedLiteral = "(" },
-        .{ .expectedType = .int, .expectedLiteral = "5" },
-        .{ .expectedType = .less_than, .expectedLiteral = "<" },
-        .{ .expectedType = .int, .expectedLiteral = "10" },
-        .{ .expectedType = .paren_r, .expectedLiteral = ")" },
-        .{ .expectedType = .brace_l, .expectedLiteral = "{" },
-        .{ .expectedType = ._return, .expectedLiteral = "return" },
-        .{ .expectedType = .true, .expectedLiteral = "true" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = .brace_r, .expectedLiteral = "}" },
-        .{ .expectedType = ._else, .expectedLiteral = "else" },
-        .{ .expectedType = .brace_l, .expectedLiteral = "{" },
-        .{ .expectedType = ._return, .expectedLiteral = "return" },
-        .{ .expectedType = .false, .expectedLiteral = "false" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = .brace_r, .expectedLiteral = "}" },
-        // 10 == 10;
-        .{ .expectedType = .int, .expectedLiteral = "10" },
-        .{ .expectedType = .equal, .expectedLiteral = "==" },
-        .{ .expectedType = .int, .expectedLiteral = "10" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        // 10 != 9;
-        .{ .expectedType = .int, .expectedLiteral = "10" },
-        .{ .expectedType = .not_equal, .expectedLiteral = "!=" },
-        .{ .expectedType = .int, .expectedLiteral = "9" },
-        .{ .expectedType = .semicolon, .expectedLiteral = ";" },
-        // end
-        .{ .expectedType = .eof, .expectedLiteral = "EOF" },
+    var tests_double_char = [_]Token{
+        .{ .int = "10" },
+        .eq,
+        .{ .int = "10" },
+        .semicolon,
+        .{ .int = "10" },
+        .not_eq,
+        .{ .int = "9" },
+        .semicolon,
+        .{ .int = "10" },
+        .le,
+        .{ .int = "11" },
+        .semicolon,
+        .{ .int = "10" },
+        .ge,
+        .{ .int = "3" },
+        .semicolon,
+        .eof,
     };
+    try runTest(input, tests_double_char[0..], "DOUBLE CHARACTER TOKENS");
+}
 
-    std.debug.print("\n", .{});
-    var lexr = Lexer.new(input, std.heap.page_allocator);
-    std.debug.print("INPUT ========================================\n{s}\n========================================\n", .{lexr.input});
-    std.debug.print(
-        "LEXER:\n\tposition - {d}\n\tread position - {d}\n\tchar - '{c}'\n",
-        .{ lexr.position, lexr.readPosition, lexr.ch },
-    );
-    inline for (tests) |t| {
-        std.debug.print("\nNEXT TOKEN\n--------------------\n", .{});
+fn runTest(input: []const u8, tests: []Token, name: []const u8) !void {
+    std.debug.print("\nTESTING: {s}\n", .{name});
+    var lexr = init(input, std.heap.page_allocator);
+    for (tests, 0..) |t, i| {
         const tkn = try lexr.nextToken();
-        std.debug.print("TOKEN ({s}): '{s}'\n", .{ tkn.type.toString(), tkn.literal });
-        std.debug.print(
-            "LEXER:\n\tposition - {d}\n\tread position - {d}\n\tchar - '{c}'\n",
-            .{ lexr.position, lexr.readPosition, lexr.ch },
-        );
-        try std.testing.expectEqual(t.expectedType, tkn.type);
-        try std.testing.expectEqualStrings(t.expectedLiteral, tkn.literal);
+
+        std.testing.expect(@intFromEnum(tkn) == @intFromEnum(t)) catch {
+            std.debug.print("FAILED TEST ({d}):\n", .{i});
+            std.debug.print("\texpected: {s} '{s}'\n", .{ @tagName(t), switch (t) {
+                .ident, .int, .illegal => |v| v,
+                else => "",
+            } });
+            std.debug.print("\tactual: {s} '{s}'\n", .{ @tagName(tkn), switch (tkn) {
+                .ident, .int, .illegal => |v| v,
+                else => "",
+            } });
+            std.debug.print("LEXER\n\tpos: {d}\n\tread pos: {d}\n\tch: '{c}'\n", .{ lexr.position, lexr.readPosition, lexr.ch });
+        };
     }
 }

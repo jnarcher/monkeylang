@@ -1,6 +1,6 @@
 const std = @import("std");
 const lexer = @import("lexer.zig");
-const token = @import("token.zig");
+const Token = @import("token.zig").Token;
 const io = std.io;
 const print = std.debug.print;
 
@@ -21,10 +21,11 @@ pub fn start(allocator: std.mem.Allocator) !void {
             return;
         }
 
-        var lexr = lexer.Lexer.new(s, allocator);
+        var lexr = lexer.init(s, allocator);
         var tkn = try lexr.nextToken();
-        while (tkn.type != token.Type.eof) : (tkn = try lexr.nextToken()) {
-            try out.print("{s}\n", .{try tkn.toString()});
+        while (tkn != Token.eof) : (tkn = try lexr.nextToken()) {
+            var buf: [255]u8 = undefined;
+            try out.print("{s}\n", .{try tkn.toString(buf[0..])});
         }
     }
 }
