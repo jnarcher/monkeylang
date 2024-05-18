@@ -1,10 +1,13 @@
 const std = @import("std");
+const allocPrint = std.fmt.allocPrint;
 
 pub const Token = union(enum) {
+    const Self = @This();
+
     ident: []const u8,
     int: []const u8,
-    illegal: []const u8,
 
+    illegal,
     eof,
 
     // Operations
@@ -26,8 +29,8 @@ pub const Token = union(enum) {
     semicolon,
     lparen,
     rparen,
-    lsquirley,
-    rsquirley,
+    lsquirly,
+    rsquirly,
 
     // Keywords
     function,
@@ -38,8 +41,8 @@ pub const Token = union(enum) {
     _else,
     _return,
 
-    pub fn keyword(ident: []const u8) ?Token {
-        const map = std.ComptimeStringMap(Token, .{
+    pub fn keyword(ident: []const u8) ?Self {
+        const map = std.ComptimeStringMap(Self, .{
             .{ "fn", .function },
             .{ "let", .let },
             .{ "true", .true },
@@ -51,17 +54,14 @@ pub const Token = union(enum) {
         return map.get(ident);
     }
 
-    pub fn toString(self: Token, buf: []u8) ![]const u8 {
+    pub fn debugString(self: Self) []const u8 {
+        const alloc = std.heap.page_allocator;
         return switch (self) {
-            ._if => try std.fmt.bufPrint(buf, "Token (if)", .{}),
-            ._else => try std.fmt.bufPrint(buf, "Token (else)", .{}),
-            ._return => try std.fmt.bufPrint(buf, "Token (return)", .{}),
-            .ident, .int, .illegal => |v| try std.fmt.bufPrint(
-                buf,
-                "Token ({s}) : '{s}'",
-                .{ @tagName(self), v },
-            ),
-            else => try std.fmt.bufPrint(buf, "Token ({s})", .{@tagName(self)}),
+            ._if => allocPrint(alloc, "Token (if)", .{}) catch "",
+            ._else => allocPrint(alloc, "Token (else)", .{}) catch "",
+            ._return => allocPrint(alloc, "Token (return)", .{}) catch "",
+            .ident, .int => |v| allocPrint(alloc, "Token ({s}) : '{s}'", .{ @tagName(self), v }) catch "",
+            else => allocPrint(alloc, "Token ({s})", .{@tagName(self)}) catch "",
         };
     }
 };
