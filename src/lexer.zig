@@ -57,7 +57,10 @@ pub const Lexer = struct {
 
     /// Look ahead one character without advancing the lexer position.
     fn peekChar(self: Self) u8 {
-        return if (self.readPosition >= self.input.len) 0 else self.input[self.readPosition];
+        return if (self.readPosition >= self.input.len)
+            0
+        else
+            self.input[self.readPosition];
     }
 
     /// Reads character from input while isValid(self.ch) returns true.
