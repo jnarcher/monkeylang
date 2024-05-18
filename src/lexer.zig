@@ -110,14 +110,12 @@ fn runTest(input: []const u8, tests: []Token, name: []const u8) !void {
         std.testing.expectEqualDeep(tst, tok) catch {
             std.debug.print(
                 \\TEST FAILED ({d})
-                \\INPUT:
-                \\{s}
                 \\TOKENS:
                 \\  expected {s}
                 \\  actual   {s}
                 \\
             ,
-                .{ i, input, tst.debugString(), tok.debugString() },
+                .{ i, tst.debugString(), tok.debugString() },
             );
             return error.FAIL;
         };
