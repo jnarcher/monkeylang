@@ -36,7 +36,7 @@ pub const Parser = struct {
         return program;
     }
 
-    pub fn peekError(self: *Parser, token: Token) !void {
+    fn peekError(self: *Parser, token: Token) !void {
         const err = try std.fmt.allocPrint(
             self.allocator,
             "expected next token to be {s}, got {s}",
@@ -45,11 +45,16 @@ pub const Parser = struct {
         try self.errors.append(err);
     }
 
+    fn nextToken(self: *Parser) void {
+        self.currToken = self.peekToken.?;
+        self.peekToken = if (self.currToken == .eof) null else self.lexer.nextToken();
+    }
+
     fn parseStatement(self: *Parser) ?ast.Statement {
         return switch (self.currToken) {
             .let => .{ .let = self.parseLetStatement() orelse return null },
             ._return => .{ ._return = self.parseReturnStatement() orelse return null },
-            else => null,
+            else => .{ .expr = self.parseExpressionStatement() orelse return null },
         };
     }
 
@@ -97,14 +102,23 @@ pub const Parser = struct {
         return stmt;
     }
 
-    fn nextToken(self: *Parser) void {
-        self.currToken = self.peekToken.?;
-        self.peekToken = if (self.currToken == .eof) null else self.lexer.nextToken();
+    fn parseExpressionStatement(self: *Parser) ?ast.ExpressionStatement {
+        const stmt = ast.ExpressionStatement{
+            .expr = undefined,
+        };
+
+        self.nextToken();
+
+        // TODO: skipping value for now
+
+        while (self.currToken != .semicolon) : (self.nextToken()) {}
+
+        return stmt;
     }
 };
 
 // TESTS BEGIN HERE
-//
+
 const testing = std.testing;
 
 fn testLetStatement(stmt: ast.Statement, ident_name: []const u8) !void {
