@@ -78,7 +78,7 @@ pub const Parser = struct {
         self.nextToken();
 
         // TODO: skipping the expressions for now
-        while (self.currToken == .semicolon) : (self.nextToken()) {}
+        while (self.currToken != .semicolon) : (self.nextToken()) {}
 
         return stmt;
     }
