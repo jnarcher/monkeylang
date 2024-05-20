@@ -15,6 +15,7 @@ pub const Lexer = struct {
 
     pub fn nextToken(self: *Lexer) Token {
         self.skipWhitespace();
+
         const tkn: Token = switch (self.ch) {
             0 => .eof,
             '+' => .plus,
@@ -106,7 +107,7 @@ fn runTest(input: []const u8, tests: []Token, name: []const u8) !void {
     var lex = Lexer.init(input);
     for (tests, 0..) |tst, i| {
         const tok = lex.nextToken();
-        testing.expectEqualDeep(tst, tok) catch {
+        testing.expectEqualDeep(tst, tok) catch |err| {
             std.log.warn(
                 \\TEST FAILED ({d})
                 \\TOKENS:
@@ -116,7 +117,7 @@ fn runTest(input: []const u8, tests: []Token, name: []const u8) !void {
             ,
                 .{ i, tst.debugString(), tok.debugString() },
             );
-            return error.FAIL;
+            return err;
         };
     }
 }
