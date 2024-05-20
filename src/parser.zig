@@ -72,7 +72,7 @@ pub const Parser = struct {
         }
         self.nextToken();
 
-        stmt.ident = self.currToken.ident;
+        stmt.ident = ast.Identifier{ .name = self.currToken.ident };
 
         if (self.peekToken.? != .assign) {
             self.peekError(.assign) catch {
@@ -118,7 +118,7 @@ pub const Parser = struct {
 const testing = std.testing;
 
 fn testLetStatement(stmt: ast.Statement, ident_name: []const u8) !void {
-    try testing.expectEqualStrings(stmt.let.ident, ident_name);
+    try testing.expectEqualStrings(stmt.let.ident.name, ident_name);
     // TODO: check for correct value
 }
 
