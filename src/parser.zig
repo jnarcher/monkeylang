@@ -414,8 +414,27 @@ test "identifier expression" {
     try testing.expectEqualStrings("foobar", name);
 }
 
-fn testIntLiteral(expr: ast.Expression, expected: i64) !void {
-    try testing.expectEqual(expected, expr.int.value);
+fn testIntLiteral(exp: *ast.Expression, expected: i64) !void {
+    try testing.expectEqual(expected, exp.int.value);
+}
+
+fn testIdentifier(exp: *ast.Expression, expected: []const u8) !void {
+    try testing.expectEqualSlices(expected, exp.ident.name);
+}
+
+fn testLiteralExpression(exp: *ast.Expression, expected: anytype) !void {
+    switch (@TypeOf(expected)) {
+        i64 => try testIntLiteral(exp, expected),
+        []const u8 => try testIdentifier(exp, expected),
+        else => std.log.warn("type of exp not handled. got={s}", @TypeOf(expected)),
+    }
+}
+
+fn testInfixExpression(exp: *ast.Expression, left: anytype, operator: Token, right: anytype) !void {
+    const infix = exp.infix;
+    try testLiteralExpression(infix.left, left);
+    try testing.expectEqual(operator, infix.operator);
+    try testLiteralExpression(infix.right, right);
 }
 
 test "int literal expression" {
@@ -445,7 +464,7 @@ test "int literal expression" {
         return err;
     };
 
-    try testIntLiteral(program.statements.items[0].expression.expression.*, 5);
+    try testIntLiteral(program.statements.items[0].expression.expression, 5);
 }
 
 test "prefix operators" {
@@ -491,7 +510,7 @@ test "prefix operators" {
             .prefix;
 
         try testing.expectEqualStrings(t.operator, prefix.operator.literal());
-        try testIntLiteral(prefix.right.*, t.value);
+        try testIntLiteral(prefix.right, t.value);
     }
 }
 
@@ -499,21 +518,21 @@ test "infix operators" {
     const InfixTest = struct {
         input: []const u8,
         left: i64,
-        operator: []const u8,
+        operator: Token,
         right: i64,
     };
 
     const infix_tests = [_]InfixTest{
-        .{ .input = "5 + 5;", .left = 5, .operator = "+", .right = 5 },
-        .{ .input = "5 - 5;", .left = 5, .operator = "-", .right = 5 },
-        .{ .input = "5 * 5;", .left = 5, .operator = "*", .right = 5 },
-        .{ .input = "5 / 5;", .left = 5, .operator = "/", .right = 5 },
-        .{ .input = "5 > 5;", .left = 5, .operator = ">", .right = 5 },
-        .{ .input = "5 < 5;", .left = 5, .operator = "<", .right = 5 },
-        .{ .input = "5 == 5;", .left = 5, .operator = "==", .right = 5 },
-        .{ .input = "5 != 5;", .left = 5, .operator = "!=", .right = 5 },
-        .{ .input = "5 <= 5;", .left = 5, .operator = "<=", .right = 5 },
-        .{ .input = "5 >= 5;", .left = 5, .operator = ">=", .right = 5 },
+        .{ .input = "5 + 5;", .left = 5, .operator = .plus, .right = 5 },
+        .{ .input = "5 - 5;", .left = 5, .operator = .minus, .right = 5 },
+        .{ .input = "5 * 5;", .left = 5, .operator = .asterisk, .right = 5 },
+        .{ .input = "5 / 5;", .left = 5, .operator = .slash, .right = 5 },
+        .{ .input = "5 > 5;", .left = 5, .operator = .gt, .right = 5 },
+        .{ .input = "5 < 5;", .left = 5, .operator = .lt, .right = 5 },
+        .{ .input = "5 == 5;", .left = 5, .operator = .eq, .right = 5 },
+        .{ .input = "5 != 5;", .left = 5, .operator = .not_eq, .right = 5 },
+        .{ .input = "5 <= 5;", .left = 5, .operator = .le, .right = 5 },
+        .{ .input = "5 >= 5;", .left = 5, .operator = .ge, .right = 5 },
     };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -539,16 +558,13 @@ test "infix operators" {
             return err;
         };
 
-        const infix = program
+        const exp = program
             .statements
             .items[0]
             .expression
-            .expression
-            .infix;
+            .expression;
 
-        try testIntLiteral(infix.left.*, t.left);
-        try testing.expectEqualStrings(t.operator, infix.operator.literal());
-        try testIntLiteral(infix.right.*, t.right);
+        try testInfixExpression(exp, t.left, t.operator, t.right);
     }
 }
 
