@@ -48,6 +48,7 @@ pub const Parser = struct {
     fn parseStatement(self: *Parser) ?ast.Statement {
         return switch (self.currToken) {
             .let => .{ .let = self.parseLetStatement() orelse return null },
+            ._return => .{ ._return = self.parseReturnStatement() orelse return null },
             else => null,
         };
     }
@@ -78,6 +79,20 @@ pub const Parser = struct {
 
         // TODO: skipping the expressions for now
         while (self.currToken == .semicolon) : (self.nextToken()) {}
+
+        return stmt;
+    }
+
+    fn parseReturnStatement(self: *Parser) ?ast.ReturnStatment {
+        const stmt = ast.ReturnStatment{
+            .value = undefined,
+        };
+
+        self.nextToken();
+
+        // TODO: skipping value for now
+
+        while (self.currToken != .semicolon) : (self.nextToken()) {}
 
         return stmt;
     }
@@ -148,9 +163,38 @@ test "let statements" {
 }
 
 test "return statements" {
-    // const input =
-    //     \\return 5;
-    //     \\return 10;
-    //     \\return add(15);
-    // ;
+    const input =
+        \\return 5;
+        \\return 10;
+        \\return add(15);
+    ;
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var lex = Lexer.init(input);
+    var parser = Parser.init(&lex, alloc);
+
+    const program = try parser.parseProgram() orelse {
+        std.log.warn("parseProgram() returned a null value.\n", .{});
+        return error.NullProgram;
+    };
+
+    try checkParserErrors(parser);
+
+    testing.expectEqual(3, program.statements.items.len) catch |err| {
+        std.log.warn(
+            "program.statements does not contain 3 statements. got={d}",
+            .{program.statements.items.len},
+        );
+        return err;
+    };
+
+    for (program.statements.items) |stmt| {
+        return switch (stmt) {
+            ._return => {},
+            else => error.IncorrectStatementType,
+        };
+    }
 }
