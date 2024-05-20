@@ -7,6 +7,7 @@ pub const Parser = struct {
     allocator: std.mem.Allocator,
     lexer: *Lexer,
 
+    errors: std.ArrayList([]const u8),
     currToken: Token,
     peekToken: ?Token,
 
@@ -16,6 +17,7 @@ pub const Parser = struct {
         return Parser{
             .allocator = allocator,
             .lexer = lexer,
+            .errors = std.ArrayList([]const u8).init(allocator),
             .currToken = currToken,
             .peekToken = peekToken,
         };
@@ -34,6 +36,15 @@ pub const Parser = struct {
         return program;
     }
 
+    pub fn peekError(self: *Parser, token: Token) !void {
+        const err = try std.fmt.allocPrint(
+            self.allocator,
+            "expected next token to be {s}, got {s}",
+            .{ token.debugString(), self.peekToken.?.debugString() },
+        );
+        try self.errors.append(err);
+    }
+
     fn parseStatement(self: *Parser) ?ast.Statement {
         return switch (self.currToken) {
             .let => .{ .let = self.parseLetStatement() orelse return null },
@@ -47,12 +58,22 @@ pub const Parser = struct {
             .value = undefined,
         };
 
-        if (self.peekToken.? != .ident) return null;
+        if (self.peekToken.? != .ident) {
+            self.peekError(.{ .ident = "any" }) catch {
+                std.log.err("Unable to create error...", .{});
+            };
+            return null;
+        }
         self.nextToken();
 
         stmt.ident = self.currToken.ident;
 
-        if (self.peekToken.? != .assign) return null;
+        if (self.peekToken.? != .assign) {
+            self.peekError(.assign) catch {
+                std.log.err("Unable to create error...", .{});
+            };
+            return null;
+        }
         self.nextToken();
 
         // TODO: skipping the expressions for now
@@ -76,8 +97,18 @@ fn testLetStatement(stmt: ast.Statement, ident_name: []const u8) !void {
     // TODO: check for correct value
 }
 
+fn checkParserErrors(parser: Parser) !void {
+    if (parser.errors.items.len == 0) return;
+
+    std.log.warn("parser has {d} error(s)\n", .{parser.errors.items.len});
+
+    for (parser.errors.items) |err| {
+        std.log.err("parser error: {s}\n", .{err});
+    }
+    return error.ParserError;
+}
+
 test "let statements" {
-    std.debug.print("\n", .{});
     const input =
         \\let x = 5;
         \\let y = 10;
@@ -96,6 +127,8 @@ test "let statements" {
         return error.NullProgram;
     };
 
+    try checkParserErrors(parser);
+
     testing.expectEqual(3, program.statements.items.len) catch |err| {
         std.log.warn(
             "program.statements does not contain 3 statements. got={d}",
@@ -112,4 +145,12 @@ test "let statements" {
 
     for (tests, 0..) |t, i|
         try testLetStatement(program.statements.items[i], t);
+}
+
+test "return statements" {
+    // const input =
+    //     \\return 5;
+    //     \\return 10;
+    //     \\return add(15);
+    // ;
 }
