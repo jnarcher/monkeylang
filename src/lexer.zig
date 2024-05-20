@@ -2,20 +2,18 @@ const std = @import("std");
 const Token = @import("token.zig").Token;
 
 pub const Lexer = struct {
-    const Self = @This();
-
     input: []const u8,
     position: usize = 0,
     readPosition: usize = 0,
     ch: u8 = 0,
 
-    pub fn init(input: []const u8) Self {
-        var lex = Self{ .input = input };
+    pub fn init(input: []const u8) Lexer {
+        var lex = Lexer{ .input = input };
         lex.readChar();
         return lex;
     }
 
-    pub fn nextToken(self: *Self) Token {
+    pub fn nextToken(self: *Lexer) Token {
         self.skipWhitespace();
         const tkn: Token = switch (self.ch) {
             0 => .eof,
@@ -45,7 +43,7 @@ pub const Lexer = struct {
         return tkn;
     }
 
-    fn readChar(self: *Self) void {
+    fn readChar(self: *Lexer) void {
         if (self.readPosition >= self.input.len) {
             self.ch = 0;
         } else {
@@ -56,7 +54,7 @@ pub const Lexer = struct {
     }
 
     /// Look ahead one character without advancing the lexer position.
-    fn peekChar(self: Self) u8 {
+    fn peekChar(self: Lexer) u8 {
         return if (self.readPosition >= self.input.len)
             0
         else
@@ -65,7 +63,7 @@ pub const Lexer = struct {
 
     /// Reads character from input while isValid(self.ch) returns true.
     /// Returns a slice containing the characters read.
-    fn readMany(self: *Self, comptime isValid: fn (ch: u8) bool) []const u8 {
+    fn readMany(self: *Lexer, comptime isValid: fn (ch: u8) bool) []const u8 {
         const position = self.position;
         while (isValid(self.ch)) : (self.readChar()) {}
         return self.input[position..self.position];
@@ -73,13 +71,13 @@ pub const Lexer = struct {
 
     /// Read any whitespace characters until a non-whitespace
     /// character is found.
-    fn skipWhitespace(self: *Self) void {
+    fn skipWhitespace(self: *Lexer) void {
         _ = self.readMany(std.ascii.isWhitespace);
     }
 
     /// Read the next character if `c1 == c2`.
     /// Returns whether the characters matched.
-    fn readIfMatch(self: *Self, c1: u8, c2: u8) bool {
+    fn readIfMatch(self: *Lexer, c1: u8, c2: u8) bool {
         const match = c1 == c2;
         if (match) self.readChar();
         return match;
@@ -87,7 +85,7 @@ pub const Lexer = struct {
 
     /// Read the next character if `c` matches the peek character.
     /// Returns whether the characters matched.
-    fn readIfMatchPeek(self: *Self, c: u8) bool {
+    fn readIfMatchPeek(self: *Lexer, c: u8) bool {
         return self.readIfMatch(self.peekChar(), c);
     }
 };
