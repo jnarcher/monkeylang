@@ -58,6 +58,7 @@ pub const ExpressionStatement = struct {
 
 pub const Expression = union(enum) {
     ident: Identifier,
+    int: IntLiteral,
 
     pub fn string(self: Expression, alloc: std.mem.Allocator) ![]const u8 {
         return switch (self) {
@@ -71,6 +72,14 @@ pub const Identifier = struct {
 
     pub fn string(self: Identifier, _: std.mem.Allocator) ![]const u8 {
         return self.name;
+    }
+};
+
+pub const IntLiteral = struct {
+    value: i64,
+
+    pub fn string(self: IntLiteral, alloc: std.mem.Allocator) ![]const u8 {
+        return try allocPrint(alloc, "{}", .{self.value});
     }
 };
 
