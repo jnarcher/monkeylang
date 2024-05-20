@@ -8,12 +8,12 @@ pub const InfixParseFn = *const fn (ptr: *Parser, expr: *ast.Expression) ?*ast.E
 
 pub const Precedence = enum(u8) {
     lowest,
-    equals, // ==
+    equals, //   ==
     less_grater, // > or <
-    sum, // +
-    product, // *
-    prefix, // -X or !X
-    call, // fn(X)
+    sum, //      +
+    product, //  *
+    prefix, //   -X or !X
+    call, //     fn(X)
 };
 
 pub const Parser = struct {
@@ -131,7 +131,7 @@ pub const Parser = struct {
 
     fn parseExpressionStatement(self: *Parser) ?ast.ExpressionStatement {
         const stmt = ast.ExpressionStatement{
-            .expression = self.parseExpression(.lowest).?,
+            .expression = self.parseExpression(.lowest) orelse return null,
         };
 
         if (self.peekToken.? == .semicolon) self.nextToken();
@@ -140,7 +140,10 @@ pub const Parser = struct {
     }
 
     fn parseExpression(self: *Parser, _: Precedence) ?*ast.Expression {
-        const prefix = self.getPrefixFn(self.currToken).?;
+        const prefix = self.getPrefixFn(self.currToken) orelse {
+            self.noPrefixParseFnError(self.currToken) catch {};
+            return null;
+        };
         const leftExp = prefix(self);
         return leftExp;
     }
@@ -195,6 +198,18 @@ pub const Parser = struct {
 
     fn getInfixFn(self: *Parser, token: Token) ?InfixParseFn {
         return self.infixParseFns.get(@tagName(token));
+    }
+
+    fn noPrefixParseFnError(self: *Parser, token: Token) !void {
+        try self.errors.append(
+            try std.fmt.allocPrint(
+                self.alloc,
+                "no prefix parase function for {s} found",
+                .{
+                    @tagName(token),
+                },
+            ),
+        );
     }
 };
 
