@@ -6,7 +6,7 @@ const print = std.debug.print;
 
 const PROMPT = ">> ";
 
-pub fn start() !void {
+pub fn start(allocator: std.mem.Allocator) !void {
     const in = std.io.getStdIn().reader();
     const out = std.io.getStdOut().writer();
 
@@ -15,7 +15,7 @@ pub fn start() !void {
     while (true) {
         try out.print(PROMPT, .{});
         const s = try in.readUntilDelimiterOrEofAlloc(
-            std.heap.page_allocator,
+            allocator,
             '\n',
             1 << 32,
         ) orelse continue;
