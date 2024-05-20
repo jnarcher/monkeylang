@@ -103,19 +103,18 @@ fn isDigit(c: u8) bool {
 
 const testing = std.testing;
 fn runTest(input: []const u8, tests: []Token, name: []const u8) !void {
-    std.log.warn("{s}\n", .{name});
     var lex = Lexer.init(input);
     for (tests, 0..) |tst, i| {
         const tok = lex.nextToken();
         testing.expectEqualDeep(tst, tok) catch |err| {
             std.log.warn(
-                \\TEST FAILED ({d})
+                \\TEST ({s}) FAILED ({d})
                 \\TOKENS:
                 \\  expected {s}
                 \\  actual   {s}
                 \\
             ,
-                .{ i, tst.debugString(), tok.debugString() },
+                .{ name, i, tst.debugString(), tok.debugString() },
             );
             return err;
         };
@@ -123,8 +122,6 @@ fn runTest(input: []const u8, tests: []Token, name: []const u8) !void {
 }
 
 test "Lexer" {
-    std.log.warn("\n", .{});
-
     var input: []const u8 = undefined;
 
     input =
