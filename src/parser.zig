@@ -54,7 +54,7 @@ pub const Parser = struct {
         return switch (self.currToken) {
             .let => .{ .let = self.parseLetStatement() orelse return null },
             ._return => .{ ._return = self.parseReturnStatement() orelse return null },
-            else => .{ .expr = self.parseExpressionStatement() orelse return null },
+            else => .{ .expression = self.parseExpressionStatement() orelse return null },
         };
     }
 
@@ -89,9 +89,7 @@ pub const Parser = struct {
     }
 
     fn parseReturnStatement(self: *Parser) ?ast.ReturnStatment {
-        const stmt = ast.ReturnStatment{
-            .value = undefined,
-        };
+        const stmt = ast.ReturnStatment{ .value = undefined };
 
         self.nextToken();
 
@@ -103,9 +101,7 @@ pub const Parser = struct {
     }
 
     fn parseExpressionStatement(self: *Parser) ?ast.ExpressionStatement {
-        const stmt = ast.ExpressionStatement{
-            .expr = undefined,
-        };
+        const stmt = ast.ExpressionStatement{ .expression = undefined };
 
         self.nextToken();
 
