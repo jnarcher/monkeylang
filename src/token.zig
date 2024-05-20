@@ -54,14 +54,44 @@ pub const Token = union(enum) {
         return map.get(ident);
     }
 
+    pub fn literal(self: Self) []const u8 {
+        return switch (self) {
+            .ident, .int => |v| v,
+            .illegal => "ILLEGAL",
+            .eof => "EOF",
+            .assign => "=",
+            .plus => "+",
+            .minus => "-",
+            .bang => "!",
+            .asterisk => "*",
+            .slash => "/",
+            .lt => "<",
+            .gt => ">",
+            .le => "<=",
+            .ge => ">=",
+            .eq => "==",
+            .not_eq => "!=",
+            .comma => ",",
+            .semicolon => ";",
+            .lparen => "(",
+            .rparen => ")",
+            .lsquirly => "{",
+            .rsquirly => "}",
+            .function => "fn",
+            .let => "let",
+            .true => "true",
+            .false => "false",
+            ._if => "if",
+            ._else => "else",
+            ._return => "return",
+        };
+    }
+
     pub fn debugString(self: Self) []const u8 {
         const alloc = std.heap.page_allocator;
         return switch (self) {
-            ._if => allocPrint(alloc, "Token (if)", .{}) catch "",
-            ._else => allocPrint(alloc, "Token (else)", .{}) catch "",
-            ._return => allocPrint(alloc, "Token (return)", .{}) catch "",
-            .ident, .int => |v| allocPrint(alloc, "Token ({s}) : '{s}'", .{ @tagName(self), v }) catch "",
-            else => allocPrint(alloc, "Token ({s})", .{@tagName(self)}) catch "",
+            .ident, .int => |v| allocPrint(alloc, "Token ({s}) : '{s}'", .{ self.literal(), v }) catch "",
+            else => allocPrint(alloc, "Token ({s})", .{self.literal()}) catch "",
         };
     }
 };
