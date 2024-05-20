@@ -3,8 +3,8 @@ const ast = @import("ast.zig");
 const Token = @import("token.zig").Token;
 const Lexer = @import("lexer.zig").Lexer;
 
-pub const PrefixParseFn = *const fn (ptr: *Parser) ast.Expression;
-pub const InfixParseFn = *const fn (ptr: *Parser, expr: ast.Expression) ast.Expression;
+pub const PrefixParseFn = *const fn (ptr: *Parser) ?*ast.Expression;
+pub const InfixParseFn = *const fn (ptr: *Parser, expr: *ast.Expression) ?*ast.Expression;
 
 pub const Precedence = enum(u8) {
     lowest,
@@ -41,6 +41,8 @@ pub const Parser = struct {
         };
         try parser.registerPrefix(.{ .ident = "any" }, parseIdentifier);
         try parser.registerPrefix(.{ .int = "any" }, parseIntLiteral);
+        try parser.registerPrefix(.bang, parsePrefixExpression);
+        try parser.registerPrefix(.minus, parsePrefixExpression);
         return parser;
     }
 
@@ -129,7 +131,7 @@ pub const Parser = struct {
 
     fn parseExpressionStatement(self: *Parser) ?ast.ExpressionStatement {
         const stmt = ast.ExpressionStatement{
-            .expression = self.parseExpression(.lowest) orelse return null,
+            .expression = self.parseExpression(.lowest).?,
         };
 
         if (self.peekToken.? == .semicolon) self.nextToken();
@@ -137,21 +139,21 @@ pub const Parser = struct {
         return stmt;
     }
 
-    fn parseExpression(self: *Parser, _: Precedence) ?ast.Expression {
-        const prefix = self.getPrefixFn(self.currToken) orelse return null;
+    fn parseExpression(self: *Parser, _: Precedence) ?*ast.Expression {
+        const prefix = self.getPrefixFn(self.currToken).?;
         const leftExp = prefix(self);
-
         return leftExp;
     }
 
-    fn parseIdentifier(self: *Parser) ast.Expression {
-        return ast.Expression{
-            .ident = ast.Identifier{ .name = self.currToken.ident },
-        };
+    fn parseIdentifier(self: *Parser) ?*ast.Expression {
+        const expr = self.alloc.create(ast.Expression) catch return null;
+        expr.* = .{ .ident = ast.Identifier{ .name = self.currToken.ident } };
+        return expr;
     }
 
-    fn parseIntLiteral(self: *Parser) ast.Expression {
-        return ast.Expression{
+    fn parseIntLiteral(self: *Parser) ?*ast.Expression {
+        const expr = self.alloc.create(ast.Expression) catch return null;
+        expr.* = .{
             .int = .{
                 .value = std.fmt.parseInt(i64, self.currToken.int, 10) catch blk: {
                     self.errors.append("unable to parse integer") catch {};
@@ -159,6 +161,24 @@ pub const Parser = struct {
                 },
             },
         };
+        return expr;
+    }
+
+    fn parsePrefixExpression(self: *Parser) ?*ast.Expression {
+        var prefix = ast.Prefix{
+            .operator = self.currToken.literal(),
+            .right = undefined,
+        };
+
+        self.nextToken();
+
+        var right = self.alloc.create(ast.Expression) catch return null;
+        right = self.parseExpression(.prefix).?;
+
+        prefix.right = right;
+        const expr = self.alloc.create(ast.Expression) catch return null;
+        expr.* = ast.Expression{ .prefix = prefix };
+        return expr;
     }
 
     fn registerPrefix(self: *Parser, token: Token, func: PrefixParseFn) !void {
@@ -312,6 +332,10 @@ test "identifier expression" {
     try testing.expectEqualStrings("foobar", name);
 }
 
+fn testIntLiteral(expr: ast.Expression, expected: i64) !void {
+    try testing.expectEqual(expected, expr.int.value);
+}
+
 test "int literal expression" {
     const input =
         \\5;
@@ -339,13 +363,52 @@ test "int literal expression" {
         return err;
     };
 
-    const int = program
-        .statements
-        .items[0]
-        .expression
-        .expression
-        .int
-        .value;
+    try testIntLiteral(program.statements.items[0].expression.expression.*, 5);
+}
 
-    try testing.expectEqual(5, int);
+test "prefix operators" {
+    const PrefixTest = struct {
+        input: []const u8,
+        operator: []const u8,
+        value: i64,
+    };
+
+    const prefix_tests = [_]PrefixTest{
+        .{ .input = "!5;", .operator = "!", .value = 5 },
+        .{ .input = "-15;", .operator = "-", .value = 15 },
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    for (prefix_tests) |t| {
+        var lex = Lexer.init(t.input);
+        var parser = try Parser.init(&lex, alloc);
+
+        const program = try parser.parseProgram() orelse {
+            std.log.warn("parseProgram() returned a null value.\n", .{});
+            return error.NullProgram;
+        };
+
+        try checkParserErrors(parser);
+
+        testing.expectEqual(1, program.statements.items.len) catch |err| {
+            std.log.warn(
+                "program.statements does not contain 1 statement. got={d}",
+                .{program.statements.items.len},
+            );
+            return err;
+        };
+
+        const prefix = program
+            .statements
+            .items[0]
+            .expression
+            .expression
+            .prefix;
+
+        try testing.expectEqualStrings(t.operator, prefix.operator);
+        try testIntLiteral(prefix.right.*, t.value);
+    }
 }

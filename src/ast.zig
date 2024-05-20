@@ -30,7 +30,7 @@ pub const Statement = union(enum) {
 
 pub const LetStatement = struct {
     ident: Identifier,
-    value: Expression,
+    value: *Expression,
 
     pub fn string(self: LetStatement, alloc: std.mem.Allocator) ![]const u8 {
         return allocPrint(alloc, "let {s} = {s};", .{
@@ -41,7 +41,7 @@ pub const LetStatement = struct {
 };
 
 pub const ReturnStatment = struct {
-    value: Expression,
+    value: *Expression,
 
     pub fn string(self: ReturnStatment, alloc: std.mem.Allocator) ![]const u8 {
         return allocPrint(alloc, "return {s};", .{try self.value.string(alloc)});
@@ -49,7 +49,7 @@ pub const ReturnStatment = struct {
 };
 
 pub const ExpressionStatement = struct {
-    expression: Expression,
+    expression: *Expression,
 
     pub fn string(self: ExpressionStatement, alloc: std.mem.Allocator) ![]const u8 {
         return self.expression.string(alloc);
@@ -59,6 +59,7 @@ pub const ExpressionStatement = struct {
 pub const Expression = union(enum) {
     ident: Identifier,
     int: IntLiteral,
+    prefix: Prefix,
 
     pub fn string(self: Expression, alloc: std.mem.Allocator) ![]const u8 {
         return switch (self) {
@@ -83,6 +84,15 @@ pub const IntLiteral = struct {
     }
 };
 
+pub const Prefix = struct {
+    operator: []const u8,
+    right: *Expression,
+
+    pub fn string(self: Prefix, alloc: std.mem.Allocator) std.fmt.AllocPrintError![]const u8 {
+        return allocPrint(alloc, "({s}{s})", .{ self.operator, try self.right.string(alloc) });
+    }
+};
+
 // TESTS BEGIN HERE
 
 const testing = std.testing;
@@ -92,13 +102,15 @@ test "print program" {
     defer arena.deinit();
     const alloc = arena.allocator();
 
+    var exp = Expression{
+        .ident = Identifier{ .name = "anotherVar" },
+    };
+
     const stmts = [_]Statement{
         Statement{
             .let = LetStatement{
                 .ident = Identifier{ .name = "myVar" },
-                .value = Expression{
-                    .ident = Identifier{ .name = "anotherVar" },
-                },
+                .value = &exp,
             },
         },
     };
