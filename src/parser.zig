@@ -7,7 +7,7 @@ pub const Parser = struct {
     allocator: std.mem.Allocator,
     lexer: *Lexer,
 
-    curToken: Token,
+    currToken: Token,
     peekToken: ?Token,
 
     pub fn init(lexer: *Lexer, allocator: std.mem.Allocator) Parser {
@@ -16,7 +16,7 @@ pub const Parser = struct {
         return Parser{
             .allocator = allocator,
             .lexer = lexer,
-            .curToken = currToken,
+            .currToken = currToken,
             .peekToken = peekToken,
         };
     }
@@ -26,7 +26,7 @@ pub const Parser = struct {
             .statements = std.ArrayList(ast.Statement).init(self.allocator),
         };
 
-        while (self.curToken != Token.eof) : (self.nextToken()) {
+        while (self.currToken != .eof) : (self.nextToken()) {
             const stmt = self.parseStatement() orelse continue;
             try program.statements.append(stmt);
         }
@@ -35,7 +35,7 @@ pub const Parser = struct {
     }
 
     fn parseStatement(self: *Parser) ?ast.Statement {
-        return switch (self.curToken) {
+        return switch (self.currToken) {
             .let => .{ .let = self.parseLetStatement() orelse return null },
             else => null,
         };
@@ -47,23 +47,23 @@ pub const Parser = struct {
             .value = undefined,
         };
 
-        if (self.peekToken.? != Token.ident) return null;
+        if (self.peekToken.? != .ident) return null;
         self.nextToken();
 
-        stmt.ident = self.curToken.ident;
+        stmt.ident = self.currToken.ident;
 
-        if (self.peekToken.? != Token.assign) return null;
+        if (self.peekToken.? != .assign) return null;
         self.nextToken();
 
         // TODO: skipping the expressions for now
-        while (self.curToken == Token.semicolon) : (self.nextToken()) {}
+        while (self.currToken == .semicolon) : (self.nextToken()) {}
 
         return stmt;
     }
 
     fn nextToken(self: *Parser) void {
-        self.curToken = self.peekToken.?;
-        self.peekToken = if (self.curToken == Token.eof) null else self.lexer.nextToken();
+        self.currToken = self.peekToken.?;
+        self.peekToken = if (self.currToken == .eof) null else self.lexer.nextToken();
     }
 };
 
