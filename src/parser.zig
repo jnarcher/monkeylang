@@ -9,11 +9,29 @@ pub const InfixParseFn = *const fn (ptr: *Parser, expr: *ast.Expression) ?*ast.E
 pub const Precedence = enum(u8) {
     lowest,
     equals, //   ==
-    less_grater, // > or <
+    less_greater, // > or <
     sum, //      +
     product, //  *
     prefix, //   -X or !X
     call, //     fn(X)
+
+    pub fn tokenPrecedence(token: Token) Precedence {
+        return switch (token) {
+            .eq, .not_eq, .le, .ge => .equals,
+            .lt, .gt => .less_greater,
+            .plus, .minus => .sum,
+            .slash, .asterisk => .product,
+            else => .lowest,
+        };
+    }
+
+    pub fn compare(a: Precedence, b: Precedence) bool {
+        return @intFromEnum(a) <= @intFromEnum(b);
+    }
+
+    pub fn compareSelf(self: Precedence, other: Precedence) bool {
+        return compare(self, other);
+    }
 };
 
 pub const Parser = struct {
@@ -43,6 +61,18 @@ pub const Parser = struct {
         try parser.registerPrefix(.{ .int = "any" }, parseIntLiteral);
         try parser.registerPrefix(.bang, parsePrefixExpression);
         try parser.registerPrefix(.minus, parsePrefixExpression);
+
+        try parser.registerInfix(.plus, parseInfixExpression);
+        try parser.registerInfix(.minus, parseInfixExpression);
+        try parser.registerInfix(.slash, parseInfixExpression);
+        try parser.registerInfix(.asterisk, parseInfixExpression);
+        try parser.registerInfix(.eq, parseInfixExpression);
+        try parser.registerInfix(.not_eq, parseInfixExpression);
+        try parser.registerInfix(.le, parseInfixExpression);
+        try parser.registerInfix(.ge, parseInfixExpression);
+        try parser.registerInfix(.lt, parseInfixExpression);
+        try parser.registerInfix(.gt, parseInfixExpression);
+
         return parser;
     }
 
@@ -66,6 +96,14 @@ pub const Parser = struct {
             .{ token.debugString(), self.peekToken.?.debugString() },
         );
         try self.errors.append(err);
+    }
+
+    fn peekPrecedence(self: Parser) Precedence {
+        return Precedence.tokenPrecedence(self.peekToken.?);
+    }
+
+    fn currPrecedence(self: Parser) Precedence {
+        return Precedence.tokenPrecedence(self.currToken);
     }
 
     fn nextToken(self: *Parser) void {
@@ -139,12 +177,26 @@ pub const Parser = struct {
         return stmt;
     }
 
-    fn parseExpression(self: *Parser, _: Precedence) ?*ast.Expression {
+    fn parseExpression(self: *Parser, precedence: Precedence) ?*ast.Expression {
         const prefix = self.getPrefixFn(self.currToken) orelse {
             self.noPrefixParseFnError(self.currToken) catch {};
             return null;
         };
-        const leftExp = prefix(self);
+
+        var leftExp = prefix(self) orelse return null;
+
+        while (self.peekToken.? != .semicolon and
+            precedence.compareSelf(self.peekPrecedence()))
+        {
+            const infix = self.getInfixFn(self.peekToken.?) orelse {
+                self.noInfixParseFnError(self.currToken) catch {};
+                return leftExp;
+            };
+
+            self.nextToken();
+            leftExp = infix(self, leftExp) orelse return leftExp;
+        }
+
         return leftExp;
     }
 
@@ -169,7 +221,7 @@ pub const Parser = struct {
 
     fn parsePrefixExpression(self: *Parser) ?*ast.Expression {
         var prefix = ast.Prefix{
-            .operator = self.currToken.literal(),
+            .operator = self.currToken,
             .right = undefined,
         };
 
@@ -182,6 +234,46 @@ pub const Parser = struct {
         const expr = self.alloc.create(ast.Expression) catch return null;
         expr.* = ast.Expression{ .prefix = prefix };
         return expr;
+    }
+
+    fn noPrefixParseFnError(self: *Parser, token: Token) !void {
+        try self.errors.append(
+            try std.fmt.allocPrint(
+                self.alloc,
+                "no prefix parse function for {s} found",
+                .{
+                    @tagName(token),
+                },
+            ),
+        );
+    }
+
+    fn parseInfixExpression(self: *Parser, left: *ast.Expression) ?*ast.Expression {
+        var infix = ast.Infix{
+            .left = left,
+            .operator = self.currToken,
+            .right = undefined,
+        };
+
+        const precedence = self.currPrecedence();
+        self.nextToken();
+        infix.right = self.parseExpression(precedence) orelse return null;
+
+        const exp = self.alloc.create(ast.Expression) catch return null;
+        exp.* = ast.Expression{ .infix = infix };
+        return exp;
+    }
+
+    fn noInfixParseFnError(self: *Parser, token: Token) !void {
+        try self.errors.append(
+            try std.fmt.allocPrint(
+                self.alloc,
+                "no infix parse function for {s} found",
+                .{
+                    @tagName(token),
+                },
+            ),
+        );
     }
 
     fn registerPrefix(self: *Parser, token: Token, func: PrefixParseFn) !void {
@@ -198,18 +290,6 @@ pub const Parser = struct {
 
     fn getInfixFn(self: *Parser, token: Token) ?InfixParseFn {
         return self.infixParseFns.get(@tagName(token));
-    }
-
-    fn noPrefixParseFnError(self: *Parser, token: Token) !void {
-        try self.errors.append(
-            try std.fmt.allocPrint(
-                self.alloc,
-                "no prefix parase function for {s} found",
-                .{
-                    @tagName(token),
-                },
-            ),
-        );
     }
 };
 
@@ -423,7 +503,64 @@ test "prefix operators" {
             .expression
             .prefix;
 
-        try testing.expectEqualStrings(t.operator, prefix.operator);
+        try testing.expectEqualStrings(t.operator, prefix.operator.literal());
         try testIntLiteral(prefix.right.*, t.value);
+    }
+}
+
+test "infix operators" {
+    const InfixTest = struct {
+        input: []const u8,
+        left: i64,
+        operator: []const u8,
+        right: i64,
+    };
+
+    const infix_tests = [_]InfixTest{
+        .{ .input = "5 + 5;", .left = 5, .operator = "+", .right = 5 },
+        .{ .input = "5 - 5;", .left = 5, .operator = "-", .right = 5 },
+        .{ .input = "5 * 5;", .left = 5, .operator = "*", .right = 5 },
+        .{ .input = "5 / 5;", .left = 5, .operator = "/", .right = 5 },
+        .{ .input = "5 > 5;", .left = 5, .operator = ">", .right = 5 },
+        .{ .input = "5 < 5;", .left = 5, .operator = "<", .right = 5 },
+        .{ .input = "5 == 5;", .left = 5, .operator = "==", .right = 5 },
+        .{ .input = "5 != 5;", .left = 5, .operator = "!=", .right = 5 },
+        .{ .input = "5 <= 5;", .left = 5, .operator = "<=", .right = 5 },
+        .{ .input = "5 >= 5;", .left = 5, .operator = ">=", .right = 5 },
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    for (infix_tests) |t| {
+        var lex = Lexer.init(t.input);
+        var parser = try Parser.init(&lex, alloc);
+
+        const program = try parser.parseProgram() orelse {
+            std.log.warn("parseProgram() returned a null value.\n", .{});
+            return error.NullProgram;
+        };
+
+        try checkParserErrors(parser);
+
+        testing.expectEqual(1, program.statements.items.len) catch |err| {
+            std.log.warn(
+                "program.statements does not contain 1 statement. got={d}",
+                .{program.statements.items.len},
+            );
+            return err;
+        };
+
+        const infix = program
+            .statements
+            .items[0]
+            .expression
+            .expression
+            .infix;
+
+        try testIntLiteral(infix.left.*, t.left);
+        try testing.expectEqualStrings(t.operator, infix.operator.literal());
+        try testIntLiteral(infix.right.*, t.right);
     }
 }
