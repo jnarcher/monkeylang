@@ -1,7 +1,7 @@
 const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
 const Lexer = @import("lexer.zig").Lexer;
-const Token = @import("lexer.zig").Token;
+const Token = @import("token.zig").Token;
 
 pub const Program = struct {
     statements: std.ArrayList(Statement),
@@ -60,6 +60,7 @@ pub const Expression = union(enum) {
     ident: Identifier,
     int: IntLiteral,
     prefix: Prefix,
+    infix: Infix,
 
     pub fn string(self: Expression, alloc: std.mem.Allocator) ![]const u8 {
         return switch (self) {
@@ -85,11 +86,28 @@ pub const IntLiteral = struct {
 };
 
 pub const Prefix = struct {
-    operator: []const u8,
+    operator: Token,
     right: *Expression,
 
     pub fn string(self: Prefix, alloc: std.mem.Allocator) std.fmt.AllocPrintError![]const u8 {
-        return allocPrint(alloc, "({s}{s})", .{ self.operator, try self.right.string(alloc) });
+        return allocPrint(alloc, "({s}{s})", .{
+            self.operator.literal(),
+            try self.right.string(alloc),
+        });
+    }
+};
+
+pub const Infix = struct {
+    left: *Expression,
+    operator: Token,
+    right: *Expression,
+
+    pub fn string(self: Infix, alloc: std.mem.Allocator) std.fmt.AllocPrintError![]const u8 {
+        return allocPrint(alloc, "({s} {s} {s})", .{
+            try self.left.string(alloc),
+            self.operator.literal(),
+            try self.right.string(alloc),
+        });
     }
 };
 
