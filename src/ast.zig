@@ -61,6 +61,7 @@ pub const Expression = union(enum) {
     int: IntLiteral,
     prefix: Prefix,
     infix: Infix,
+    boolean: Boolean,
 
     pub fn string(self: Expression, alloc: std.mem.Allocator) ![]const u8 {
         return switch (self) {
@@ -82,6 +83,14 @@ pub const IntLiteral = struct {
 
     pub fn string(self: IntLiteral, alloc: std.mem.Allocator) ![]const u8 {
         return try allocPrint(alloc, "{}", .{self.value});
+    }
+};
+
+pub const Boolean = struct {
+    value: bool,
+
+    pub fn string(self: Boolean, _: std.mem.Allocator) ![]const u8 {
+        return if (self.value) "true" else "false";
     }
 };
 
