@@ -65,6 +65,7 @@ pub const Parser = struct {
         try parser.registerPrefix(.false, parseBoolLiteral);
         try parser.registerPrefix(.lparen, parseGroupedExpression);
         try parser.registerPrefix(._if, parseIfExpression);
+        try parser.registerPrefix(.function, parseFunctionLiteral);
 
         try parser.registerInfix(.plus, parseInfixExpression);
         try parser.registerInfix(.minus, parseInfixExpression);
@@ -269,6 +270,69 @@ pub const Parser = struct {
         const expr = self.newExpression() catch return null;
         expr.* = ast.Expression{ .prefix = prefix };
         return expr;
+    }
+
+    fn parseFunctionLiteral(self: *Parser) ?*ast.Expression {
+        var lit = ast.FunctionLiteral{
+            .params = undefined,
+            .body = undefined,
+        };
+
+        if (self.peekToken.? != .lparen) {
+            self.peekError(.lparen) catch {};
+            return null;
+        }
+        self.nextToken();
+
+        // std.debug.print("{s}\n", .{self.currToken.debugString()});
+
+        const params = self.parseFunctionParameters() catch {
+            self.errors.append("error parsing function parameters") catch {};
+            return null;
+        };
+        lit.params = params orelse {
+            self.errors.append("parsing function params returned null") catch {};
+            return null;
+        };
+
+        if (self.peekToken.? != .lsquirly) {
+            self.peekError(.lsquirly) catch {};
+            return null;
+        }
+        self.nextToken();
+
+        lit.body = self.parseBlockStatement() orelse return null;
+
+        const exp = self.newExpression() catch return null;
+        exp.* = ast.Expression{ .function = lit };
+        return exp;
+    }
+
+    fn parseFunctionParameters(self: *Parser) !?std.ArrayList(ast.Identifier) {
+        var idents = std.ArrayList(ast.Identifier).init(self.alloc);
+
+        if (self.peekToken.? == .rparen) {
+            self.nextToken();
+            return idents;
+        }
+
+        self.nextToken();
+
+        try idents.append(ast.Identifier{ .name = self.currToken.ident });
+
+        while (self.peekToken.? == .comma) {
+            self.nextToken();
+            self.nextToken();
+            try idents.append(ast.Identifier{ .name = self.currToken.ident });
+        }
+
+        if (self.peekToken.? != .rparen) {
+            self.peekError(.rparen) catch {};
+            return null;
+        }
+        self.nextToken();
+
+        return idents;
     }
 
     fn parseIfExpression(self: *Parser) ?*ast.Expression {

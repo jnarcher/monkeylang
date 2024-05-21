@@ -501,3 +501,104 @@ test "if-else expression" {
 
     try testIdentifier(alternative.expression, "right");
 }
+
+test "function literal expression" {
+    const input = "fn(x, y) { x + y; }";
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var lex = Lexer.init(input);
+    var parser = try Parser.init(&lex, alloc);
+
+    const program = try parser.parseProgram() orelse {
+        std.log.warn("parseProgram() returned a null value.\n", .{});
+        return error.NullProgram;
+    };
+    try checkParserErrors(parser);
+
+    const function = switch (program.statements.items[0].expression.expression.*) {
+        .function => |v| v,
+        else => return error.NotIfExpression,
+    };
+
+    var param1 = ast.Expression{ .ident = function.params.items[0] };
+    var param2 = ast.Expression{ .ident = function.params.items[1] };
+
+    try testIdentifier(&param1, "x");
+    try testIdentifier(&param2, "y");
+
+    try testing.expectEqual(1, function.body.statements.items.len);
+
+    const body = switch (function.body.statements.items[0]) {
+        .expression => |v| v,
+        else => return error.BodyNotExpressionStatement,
+    };
+
+    try testInfixExpression(body.expression, "x", .plus, "y");
+}
+
+test "funciton parameter parsing" {
+    const Param = struct {
+        name: []const u8,
+    };
+
+    const Test = struct {
+        input: []const u8,
+        expectedParams: []Param,
+    };
+
+    var params1 = [_]Param{};
+    var params2 = [_]Param{
+        .{ .name = "x" },
+    };
+    var params3 = [_]Param{
+        .{ .name = "x" },
+        .{ .name = "y" },
+        .{ .name = "z" },
+    };
+
+    const tests = [_]Test{
+        .{ .input = "fn() {};", .expectedParams = &params1 },
+        .{
+            .input = "fn(x) {};",
+            .expectedParams = &params2,
+        },
+        .{
+            .input = "fn(x, y, z) {};",
+            .expectedParams = &params3,
+        },
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    for (tests) |t| {
+        var lex = Lexer.init(t.input);
+        var parser = try Parser.init(&lex, alloc);
+
+        const program = try parser.parseProgram() orelse {
+            std.log.warn("parseProgram() returned a null value.\n", .{});
+            return error.NullProgram;
+        };
+        try checkParserErrors(parser);
+
+        const function = switch (program.statements.items[0].expression.expression.*) {
+            .function => |v| v,
+            else => return error.NotIfExpression,
+        };
+
+        try testing.expectEqual(t.expectedParams.len, function.params.items.len);
+
+        for (function.params.items, t.expectedParams) |param, expected| {
+            var exp = ast.Expression{
+                .ident = ast.Identifier{
+                    .name = param.name,
+                },
+            };
+            try testIdentifier(&exp, expected.name);
+        }
+    }
+}
