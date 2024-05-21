@@ -319,22 +319,6 @@ pub const Parser = struct {
         return exp;
     }
 
-    fn newExpression(self: *Parser) !*ast.Expression {
-        return self.alloc.create(ast.Expression);
-    }
-
-    fn noPrefixParseFnError(self: *Parser, token: Token) !void {
-        try self.errors.append(
-            try std.fmt.allocPrint(
-                self.alloc,
-                "no prefix parse function for ' {s} ' found",
-                .{
-                    token.literal(),
-                },
-            ),
-        );
-    }
-
     fn parseInfixExpression(self: *Parser, left: *ast.Expression) ?*ast.Expression {
         var infix = ast.Infix{
             .left = left,
@@ -349,6 +333,22 @@ pub const Parser = struct {
         const exp = self.alloc.create(ast.Expression) catch return null;
         exp.* = ast.Expression{ .infix = infix };
         return exp;
+    }
+
+    fn newExpression(self: *Parser) !*ast.Expression {
+        return self.alloc.create(ast.Expression);
+    }
+
+    fn noPrefixParseFnError(self: *Parser, token: Token) !void {
+        try self.errors.append(
+            try std.fmt.allocPrint(
+                self.alloc,
+                "no prefix parse function for ' {s} ' found",
+                .{
+                    token.literal(),
+                },
+            ),
+        );
     }
 
     fn registerPrefix(self: *Parser, token: Token, func: PrefixParseFn) !void {
