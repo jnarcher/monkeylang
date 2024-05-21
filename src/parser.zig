@@ -424,9 +424,9 @@ fn testIdentifier(exp: *ast.Expression, expected: []const u8) !void {
 
 fn testLiteralExpression(exp: *ast.Expression, expected: anytype) !void {
     switch (@TypeOf(expected)) {
-        i64 => try testIntLiteral(exp, expected),
+        comptime_int, i64 => try testIntLiteral(exp, expected),
         []const u8 => try testIdentifier(exp, expected),
-        else => std.log.warn("type of exp not handled. got={s}", @TypeOf(expected)),
+        else => std.log.warn("type of exp not handled. got={s}", .{@typeName(@TypeOf(expected))}),
     }
 }
 
@@ -464,7 +464,13 @@ test "int literal expression" {
         return err;
     };
 
-    try testIntLiteral(program.statements.items[0].expression.expression, 5);
+    const exp = program
+        .statements
+        .items[0]
+        .expression
+        .expression;
+
+    try testLiteralExpression(exp, 5);
 }
 
 test "prefix operators" {
