@@ -8,7 +8,6 @@ const testing = std.testing;
 
 fn testLetStatement(stmt: ast.Statement, ident_name: []const u8) !void {
     try testing.expectEqualStrings(stmt.let.ident.name, ident_name);
-    // TODO: check for correct value
 }
 
 fn checkParserErrors(parser: Parser) !void {
@@ -23,49 +22,65 @@ fn checkParserErrors(parser: Parser) !void {
 }
 
 test "let statements" {
-    const input =
-        \\let x = 5;
-        \\let y = 10;
-        \\let foobar = 838383;
-    ;
+    const Let = struct {
+        input: []const u8,
+        expectedIdent: []const u8,
+        expectedValue: i64,
+    };
+
+    const tests = [_]Let{
+        .{
+            .input = "let x = 5;",
+            .expectedIdent = "x",
+            .expectedValue = 5,
+        },
+        .{
+            .input = "let y = 10;",
+            .expectedIdent = "y",
+            .expectedValue = 10,
+        },
+        .{
+            .input = "let foobar = 838383;",
+            .expectedIdent = "foobar",
+            .expectedValue = 838383,
+        },
+    };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    var lex = Lexer.init(input);
-    var parser = try Parser.init(&lex, alloc);
+    for (tests) |t| {
+        var lex = Lexer.init(t.input);
+        var parser = try Parser.init(&lex, alloc);
 
-    const program = try parser.parseProgram() orelse {
-        std.log.warn("parseProgram() returned a null value.\n", .{});
-        return error.NullProgram;
-    };
+        const program = try parser.parseProgram() orelse {
+            std.log.warn("parseProgram() returned a null value.\n", .{});
+            return error.NullProgram;
+        };
 
-    try checkParserErrors(parser);
+        try checkParserErrors(parser);
 
-    testing.expectEqual(3, program.statements.items.len) catch |err| {
-        std.log.warn(
-            "program.statements does not contain 3 statements. got={d}",
-            .{program.statements.items.len},
-        );
-        return err;
-    };
+        testing.expectEqual(1, program.statements.items.len) catch |err| {
+            std.log.warn(
+                "program.statements does not contain 1 statement. got={d}",
+                .{program.statements.items.len},
+            );
+            return err;
+        };
 
-    const tests = [_][]const u8{
-        "x",
-        "y",
-        "foobar",
-    };
+        const let_stmt = program.statements.items[0];
 
-    for (tests, 0..) |t, i|
-        try testLetStatement(program.statements.items[i], t);
+        try testLetStatement(let_stmt, t.expectedIdent);
+
+        try testLiteralExpression(let_stmt.let.value, t.expectedValue);
+    }
 }
 
 test "return statements" {
     const input =
-        \\return 5;
         \\return 10;
-        \\return add(15);
+        \\return;
     ;
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -82,19 +97,23 @@ test "return statements" {
 
     try checkParserErrors(parser);
 
-    testing.expectEqual(3, program.statements.items.len) catch |err| {
+    testing.expectEqual(2, program.statements.items.len) catch |err| {
         std.log.warn(
-            "program.statements does not contain 3 statements. got={d}",
+            "program.statements does not contain 2 statement. got={d}",
             .{program.statements.items.len},
         );
         return err;
     };
 
-    for (program.statements.items) |stmt| {
-        return switch (stmt) {
-            ._return => {},
-            else => error.IncorrectStatementType,
-        };
+    const stmt1 = program.statements.items[0];
+
+    try testLiteralExpression(stmt1._return.value.?, 10);
+
+    const stmt2 = program.statements.items[1];
+
+    if (stmt2._return.value) |v| {
+        std.log.err("unexpected return value: {s}", .{try v.string(alloc)});
+        return error.UnexpectedReturnValue;
     }
 }
 

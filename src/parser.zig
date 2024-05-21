@@ -155,21 +155,27 @@ pub const Parser = struct {
             return null;
         }
         self.nextToken();
+        self.nextToken();
 
-        // TODO: skipping the expressions for now
-        while (self.currToken != .semicolon) : (self.nextToken()) {}
+        stmt.value = self.parseExpression(.lowest) orelse return null;
+
+        if (self.peekToken.? == .semicolon) self.nextToken();
 
         return stmt;
     }
 
     fn parseReturnStatement(self: *Parser) ?ast.ReturnStatment {
-        const stmt = ast.ReturnStatment{ .value = undefined };
+        var stmt = ast.ReturnStatment{ .value = null };
 
         self.nextToken();
 
-        // TODO: skipping value for now
+        if (self.currToken == .semicolon) {
+            return stmt;
+        }
 
-        while (self.currToken != .semicolon) : (self.nextToken()) {}
+        stmt.value = self.parseExpression(.lowest);
+
+        if (self.peekToken.? == .semicolon) self.nextToken();
 
         return stmt;
     }

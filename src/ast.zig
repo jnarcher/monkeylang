@@ -42,10 +42,13 @@ pub const LetStatement = struct {
 };
 
 pub const ReturnStatment = struct {
-    value: *Expression,
+    value: ?*Expression,
 
     pub fn string(self: ReturnStatment, alloc: std.mem.Allocator) ![]const u8 {
-        return allocPrint(alloc, "return {s};", .{try self.value.string(alloc)});
+        if (self.value) |v| {
+            return allocPrint(alloc, "return {s};", .{try v.string(alloc)});
+        }
+        return "return;";
     }
 };
 
