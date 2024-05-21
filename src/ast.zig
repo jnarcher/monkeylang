@@ -79,6 +79,7 @@ pub const Expression = union(enum) {
     infix: Infix,
     boolean: Boolean,
     _if: IfExpression,
+    function: FunctionLiteral,
 
     pub fn string(self: Expression, alloc: std.mem.Allocator) ![]const u8 {
         return switch (self) {
@@ -162,6 +163,35 @@ pub const IfExpression = struct {
                 .{try alt.string(alloc)},
             ));
         }
+
+        return out.toOwnedSlice();
+    }
+};
+
+pub const FunctionLiteral = struct {
+    params: std.ArrayList(Identifier),
+    body: BlockStatement,
+
+    pub fn string(self: FunctionLiteral, alloc: std.mem.Allocator) std.fmt.AllocPrintError![]const u8 {
+        var params_str = std.ArrayList(u8).init(alloc);
+        defer params_str.deinit();
+        for (self.params.items, 0..) |param, i| {
+            if (i < self.params.items.len) {
+                try params_str.appendSlice(", ");
+            }
+            try params_str.appendSlice(try param.string(alloc));
+        }
+
+        var out = std.ArrayList(u8).init(alloc);
+        defer out.deinit();
+        try out.appendSlice(try allocPrint(
+            alloc,
+            "fn({s}) {{ {s} }}",
+            .{
+                try params_str.toOwnedSlice(),
+                try self.body.string(alloc),
+            },
+        ));
 
         return out.toOwnedSlice();
     }
