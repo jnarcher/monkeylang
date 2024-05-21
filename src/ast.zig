@@ -180,10 +180,10 @@ pub const FunctionLiteral = struct {
         var params_str = std.ArrayList(u8).init(alloc);
         defer params_str.deinit();
         for (self.params.items, 0..) |param, i| {
-            if (i < self.params.items.len) {
+            try params_str.appendSlice(try param.string(alloc));
+            if (i < self.params.items.len - 1) {
                 try params_str.appendSlice(", ");
             }
-            try params_str.appendSlice(try param.string(alloc));
         }
 
         var out = std.ArrayList(u8).init(alloc);
