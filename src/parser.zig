@@ -21,6 +21,7 @@ pub const Precedence = enum(u8) {
             .lt, .gt => .less_greater,
             .plus, .minus => .sum,
             .slash, .asterisk => .product,
+            .lparen => .call,
             else => .lowest,
         };
     }
@@ -77,6 +78,7 @@ pub const Parser = struct {
         try parser.registerInfix(.ge, parseInfixExpression);
         try parser.registerInfix(.lt, parseInfixExpression);
         try parser.registerInfix(.gt, parseInfixExpression);
+        try parser.registerInfix(.lparen, parseCallExpression);
 
         return parser;
     }
@@ -397,6 +399,45 @@ pub const Parser = struct {
         const exp = self.alloc.create(ast.Expression) catch return null;
         exp.* = ast.Expression{ .infix = infix };
         return exp;
+    }
+
+    fn parseCallExpression(self: *Parser, func_exp: *ast.Expression) ?*ast.Expression {
+        const exp = self.newExpression() catch return null;
+        exp.* = ast.Expression{
+            .call = .{
+                .function = func_exp,
+                .arguments = self.parseCallArguments() orelse return null,
+            },
+        };
+        return exp;
+    }
+
+    fn parseCallArguments(self: *Parser) ?std.ArrayList(*ast.Expression) {
+        var args = std.ArrayList(*ast.Expression).init(self.alloc);
+
+        if (self.peekToken.? == .rparen) {
+            self.nextToken();
+            return args;
+        }
+
+        self.nextToken();
+        var exp = self.parseExpression(.lowest) orelse return null;
+        args.append(exp) catch return null;
+
+        while (self.peekToken.? == .comma) {
+            self.nextToken();
+            self.nextToken();
+            exp = self.parseExpression(.lowest) orelse return null;
+            args.append(exp) catch return null;
+        }
+
+        if (self.peekToken.? != .rparen) {
+            self.peekError(.rparen) catch {};
+            return null;
+        }
+        self.nextToken();
+
+        return args;
     }
 
     fn newExpression(self: *Parser) !*ast.Expression {

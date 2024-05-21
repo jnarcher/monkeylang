@@ -362,6 +362,18 @@ test "operator precedence" {
             .input = "3 < 5 == true",
             .expected = "((3 < 5) == true)",
         },
+        // .{
+        //     .input = "a + add(a * b) + d",
+        //     .expected = "((a + add((b * c))) + d)",
+        // },
+        // .{
+        //     .input = "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+        //     .expected = "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+        // },
+        // .{
+        //     .input = "add(a + b + c * d / f + g)",
+        //     .expected = "add((((a + b) + ((c * d) / f)) + g))",
+        // },
     };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -382,7 +394,7 @@ test "operator precedence" {
     }
 }
 
-test "forced operator precedence" {
+test "grouped operator precedence" {
     const PrecedenceTest = struct {
         input: []const u8,
         expected: []const u8,
@@ -539,7 +551,7 @@ test "function literal expression" {
     try testInfixExpression(body.expression, "x", .plus, "y");
 }
 
-test "funciton parameter parsing" {
+test "function parameter parsing" {
     const Param = struct {
         name: []const u8,
     };
@@ -601,4 +613,40 @@ test "funciton parameter parsing" {
             try testIdentifier(&exp, expected.name);
         }
     }
+}
+
+test "function call parsing" {
+    const input = "add(1, 2 * 3, 4 + 5);";
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var lex = Lexer.init(input);
+    var parser = try Parser.init(&lex, alloc);
+
+    const program = try parser.parseProgram() orelse {
+        std.log.err("program is null", .{});
+        return error.NullProgram;
+    };
+    try checkParserErrors(parser);
+
+    try testing.expectEqual(1, program.statements.items.len);
+
+    const stmt = program
+        .statements
+        .items[0];
+
+    const call_exp = switch (stmt.expression.expression.*) {
+        .call => |v| v,
+        else => return error.NoCallExpression,
+    };
+
+    try testIdentifier(call_exp.function, "add");
+
+    try testing.expectEqual(3, call_exp.arguments.items.len);
+
+    try testLiteralExpression(call_exp.arguments.items[0], 1);
+    try testInfixExpression(call_exp.arguments.items[1], 2, .asterisk, 3);
+    try testInfixExpression(call_exp.arguments.items[2], 4, .plus, 5);
 }
