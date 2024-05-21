@@ -63,6 +63,7 @@ pub const Parser = struct {
         try parser.registerPrefix(.minus, parsePrefixExpression);
         try parser.registerPrefix(.true, parseBoolLiteral);
         try parser.registerPrefix(.false, parseBoolLiteral);
+        try parser.registerPrefix(.lparen, parseGroupedExpression);
 
         try parser.registerInfix(.plus, parseInfixExpression);
         try parser.registerInfix(.minus, parseInfixExpression);
@@ -228,6 +229,14 @@ pub const Parser = struct {
             },
         };
         return expr;
+    }
+
+    fn parseGroupedExpression(self: *Parser) ?*ast.Expression {
+        self.nextToken();
+        const exp = self.parseExpression(Precedence.lowest);
+        if (self.peekToken.? != Token.rparen) return null;
+        self.nextToken();
+        return exp;
     }
 
     fn parsePrefixExpression(self: *Parser) ?*ast.Expression {
@@ -643,6 +652,49 @@ test "operator precedence" {
         .{
             .input = "3 < 5 == true",
             .expected = "((3 < 5) == true)",
+        },
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    for (precedence_tests) |t| {
+        var lex = Lexer.init(t.input);
+        var parser = try Parser.init(&lex, alloc);
+
+        const program = try parser.parseProgram() orelse {
+            std.log.warn("parseProgram() returned a null value.\n", .{});
+            return error.NullProgram;
+        };
+        try checkParserErrors(parser);
+
+        try testing.expectEqualStrings(t.expected, try program.string(alloc));
+    }
+}
+
+test "forced operator precedence" {
+    const PrecedenceTest = struct {
+        input: []const u8,
+        expected: []const u8,
+    };
+
+    const precedence_tests = [_]PrecedenceTest{
+        .{
+            .input = "1 + (2 + 3) + 4",
+            .expected = "((1 + (2 + 3)) + 4)",
+        },
+        .{
+            .input = "(5 + 5) * 2",
+            .expected = "((5 + 5) * 2)",
+        },
+        .{
+            .input = "-(5 + 5)",
+            .expected = "(-(5 + 5))",
+        },
+        .{
+            .input = "!(true == true)",
+            .expected = "(!(true == true))",
         },
     };
 
