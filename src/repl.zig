@@ -10,7 +10,7 @@ pub fn start(allocator: std.mem.Allocator) !void {
     const in = std.io.getStdIn().reader();
     const out = std.io.getStdOut().writer();
 
-    try out.print("Monkeylang REPL ('exit' or 'CTRL-C' to quit)\n", .{});
+    try out.print("Monkeylang REPL ('CTRL-C' to quit)\n", .{});
 
     while (true) {
         try out.print(PROMPT, .{});
@@ -19,11 +19,6 @@ pub fn start(allocator: std.mem.Allocator) !void {
             '\n',
             1 << 32,
         ) orelse continue;
-
-        if (std.mem.eql(u8, s, "exit")) {
-            try out.print("Quitting...\n", .{});
-            return;
-        }
 
         var lex = Lexer.init(s);
         var parser = try Parser.init(&lex, allocator);
