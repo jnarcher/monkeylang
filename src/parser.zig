@@ -61,6 +61,8 @@ pub const Parser = struct {
         try parser.registerPrefix(.{ .int = "any" }, parseIntLiteral);
         try parser.registerPrefix(.bang, parsePrefixExpression);
         try parser.registerPrefix(.minus, parsePrefixExpression);
+        try parser.registerPrefix(.true, parseBoolLiteral);
+        try parser.registerPrefix(.false, parseBoolLiteral);
 
         try parser.registerInfix(.plus, parseInfixExpression);
         try parser.registerInfix(.minus, parseInfixExpression);
@@ -213,6 +215,16 @@ pub const Parser = struct {
                     self.errors.append("unable to parse integer") catch {};
                     break :blk 0;
                 },
+            },
+        };
+        return expr;
+    }
+
+    fn parseBoolLiteral(self: *Parser) ?*ast.Expression {
+        const expr = self.alloc.create(ast.Expression) catch return null;
+        expr.* = .{
+            .boolean = .{
+                .value = self.currToken == Token.true,
             },
         };
         return expr;
@@ -508,15 +520,14 @@ test "prefix operators" {
             return err;
         };
 
-        const prefix = program
+        const exp = program
             .statements
             .items[0]
             .expression
-            .expression
-            .prefix;
+            .expression;
 
-        try testing.expectEqualStrings(t.operator, prefix.operator.literal());
-        try testIntLiteral(prefix.right, t.value);
+        try testing.expectEqualStrings(t.operator, exp.prefix.operator.literal());
+        try testLiteralExpression(exp.prefix.right, t.value);
     }
 }
 
@@ -581,17 +592,58 @@ test "operator precedence" {
     };
 
     const precedence_tests = [_]PrecedenceTest{
-        .{ .input = "-a * b", .expected = "((-a) * b)" },
-        .{ .input = "!-a", .expected = "(!(-a))" },
-        .{ .input = "a + b + c", .expected = "((a + b) + c)" },
-        .{ .input = "a * b * c", .expected = "((a * b) * c)" },
-        .{ .input = "a * b / c", .expected = "((a * b) / c)" },
-        .{ .input = "a + b / c", .expected = "(a + (b / c))" },
-        .{ .input = "a + b * c + d / e - f", .expected = "(((a + (b * c)) + (d / e)) - f)" },
-        .{ .input = "3 + 4; -5 * 5", .expected = "(3 + 4)((-5) * 5)" },
-        .{ .input = "5 > 4 == 3 < 4", .expected = "((5 > 4) == (3 < 4))" },
-        .{ .input = "5 < 4 != 3 > 4", .expected = "((5 < 4) != (3 > 4))" },
-        .{ .input = "3 + 4 * 5 == 3 * 1 + 4 * 5", .expected = "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))" },
+        .{
+            .input = "-a * b",
+            .expected = "((-a) * b)",
+        },
+        .{
+            .input = "!-a",
+            .expected = "(!(-a))",
+        },
+        .{
+            .input = "a + b + c",
+            .expected = "((a + b) + c)",
+        },
+        .{
+            .input = "a * b * c",
+            .expected = "((a * b) * c)",
+        },
+        .{
+            .input = "a * b / c",
+            .expected = "((a * b) / c)",
+        },
+        .{
+            .input = "a + b / c",
+            .expected = "(a + (b / c))",
+        },
+        .{
+            .input = "a + b * c + d / e - f",
+            .expected = "(((a + (b * c)) + (d / e)) - f)",
+        },
+        .{
+            .input = "3 + 4; -5 * 5",
+            .expected = "(3 + 4)((-5) * 5)",
+        },
+        .{
+            .input = "5 > 4 == 3 < 4",
+            .expected = "((5 > 4) == (3 < 4))",
+        },
+        .{
+            .input = "5 < 4 != 3 > 4",
+            .expected = "((5 < 4) != (3 > 4))",
+        },
+        .{
+            .input = "3 + 4 * 5 == 3 * 1 + 4 * 5",
+            .expected = "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+        },
+        .{
+            .input = "3 > 5 == false",
+            .expected = "((3 > 5) == false)",
+        },
+        .{
+            .input = "3 < 5 == true",
+            .expected = "((3 < 5) == true)",
+        },
     };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
