@@ -205,11 +205,12 @@ pub const CallExpression = struct {
     pub fn string(self: CallExpression, alloc: std.mem.Allocator) std.fmt.AllocPrintError![]const u8 {
         var args_str = std.ArrayList(u8).init(alloc);
         defer args_str.deinit();
+
         for (self.arguments.items, 0..) |arg, i| {
-            if (i < self.arguments.items.len) {
+            try args_str.appendSlice(try arg.string(alloc));
+            if (i < self.arguments.items.len - 1) {
                 try args_str.appendSlice(", ");
             }
-            try args_str.appendSlice(try arg.string(alloc));
         }
 
         var out = std.ArrayList(u8).init(alloc);
