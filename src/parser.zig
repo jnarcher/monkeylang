@@ -64,6 +64,7 @@ pub const Parser = struct {
         try parser.registerPrefix(.true, parseBoolLiteral);
         try parser.registerPrefix(.false, parseBoolLiteral);
         try parser.registerPrefix(.lparen, parseGroupedExpression);
+        try parser.registerPrefix(._if, parseIfExpression);
 
         try parser.registerInfix(.plus, parseInfixExpression);
         try parser.registerInfix(.minus, parseInfixExpression);
@@ -170,6 +171,20 @@ pub const Parser = struct {
         return stmt;
     }
 
+    fn parseBlockStatement(self: *Parser) ?ast.BlockStatement {
+        var block = ast.BlockStatement{
+            .statements = std.ArrayList(ast.Statement).init(self.alloc),
+        };
+
+        self.nextToken();
+
+        while (self.currToken != .rsquirly and self.currToken != .eof) : (self.nextToken()) {
+            const stmt = self.parseStatement() orelse continue;
+            block.statements.append(stmt) catch {};
+        }
+        return block;
+    }
+
     fn parseExpressionStatement(self: *Parser) ?ast.ExpressionStatement {
         const stmt = ast.ExpressionStatement{
             .expression = self.parseExpression(.lowest) orelse return null,
@@ -203,13 +218,13 @@ pub const Parser = struct {
     }
 
     fn parseIdentifier(self: *Parser) ?*ast.Expression {
-        const exp = self.alloc.create(ast.Expression) catch return null;
+        const exp = self.newExpression() catch return null;
         exp.* = .{ .ident = ast.Identifier{ .name = self.currToken.ident } };
         return exp;
     }
 
     fn parseIntLiteral(self: *Parser) ?*ast.Expression {
-        const expr = self.alloc.create(ast.Expression) catch return null;
+        const expr = self.newExpression() catch return null;
         expr.* = .{
             .int = .{
                 .value = std.fmt.parseInt(i64, self.currToken.int, 10) catch blk: {
@@ -222,7 +237,7 @@ pub const Parser = struct {
     }
 
     fn parseBoolLiteral(self: *Parser) ?*ast.Expression {
-        const expr = self.alloc.create(ast.Expression) catch return null;
+        const expr = self.newExpression() catch return null;
         expr.* = .{
             .boolean = .{
                 .value = self.currToken == Token.true,
@@ -247,13 +262,65 @@ pub const Parser = struct {
 
         self.nextToken();
 
-        var right = self.alloc.create(ast.Expression) catch return null;
+        var right = self.newExpression() catch return null;
         right = self.parseExpression(.prefix).?;
 
         prefix.right = right;
-        const expr = self.alloc.create(ast.Expression) catch return null;
+        const expr = self.newExpression() catch return null;
         expr.* = ast.Expression{ .prefix = prefix };
         return expr;
+    }
+
+    fn parseIfExpression(self: *Parser) ?*ast.Expression {
+        if (self.peekToken.? != .lparen) {
+            self.peekError(.lparen) catch {};
+            return null;
+        }
+        self.nextToken();
+
+        self.nextToken();
+        var _if = ast.IfExpression{
+            .condition = self.parseExpression(.lowest) orelse return null,
+            .consequence = undefined,
+            .alternative = null,
+        };
+
+        if (self.peekToken.? != .rparen) {
+            self.peekError(.rparen) catch {};
+            return null;
+        }
+        self.nextToken();
+
+        if (self.peekToken.? != .lsquirly) {
+            self.peekError(.lsquirly) catch {};
+            return null;
+        }
+        self.nextToken();
+
+        _if.consequence = self.parseBlockStatement() orelse {
+            self.errors.append("if statment consequence block is null") catch {};
+            return null;
+        };
+
+        if (self.peekToken.? == ._else) {
+            self.nextToken();
+
+            if (self.peekToken.? != .lsquirly) {
+                self.peekError(.lsquirly) catch {};
+                return null;
+            }
+            self.nextToken();
+
+            _if.alternative = self.parseBlockStatement();
+        }
+
+        const exp = self.newExpression() catch return null;
+        exp.* = ast.Expression{ ._if = _if };
+        return exp;
+    }
+
+    fn newExpression(self: *Parser) !*ast.Expression {
+        return self.alloc.create(ast.Expression);
     }
 
     fn noPrefixParseFnError(self: *Parser, token: Token) !void {
@@ -440,14 +507,22 @@ fn testIntLiteral(exp: *ast.Expression, expected: i64) !void {
 }
 
 fn testIdentifier(exp: *ast.Expression, expected: []const u8) !void {
-    try testing.expectEqualSlices(expected, exp.ident.name);
+    try testing.expectEqualStrings(expected, exp.ident.name);
+}
+
+fn testBooleanLiteral(exp: *ast.Expression, expected: bool) !void {
+    try testing.expectEqual(expected, exp.boolean.value);
 }
 
 fn testLiteralExpression(exp: *ast.Expression, expected: anytype) !void {
-    switch (@TypeOf(expected)) {
-        comptime_int, i64 => try testIntLiteral(exp, expected),
-        []const u8 => try testIdentifier(exp, expected),
-        else => std.log.warn("type of exp not handled. got={s}", .{@typeName(@TypeOf(expected))}),
+    switch (@typeInfo(@TypeOf(expected))) {
+        .Int, .ComptimeInt => try testIntLiteral(exp, expected),
+        .Array, .Pointer => try testIdentifier(exp, expected),
+        .Bool => try testBooleanLiteral(exp, expected),
+        else => {
+            std.log.warn("type of exp not handled. got={}\n", .{@TypeOf(expected)});
+            std.log.warn("type info: {}\n", .{@typeInfo(@TypeOf(expected))});
+        },
     }
 }
 
@@ -714,4 +789,81 @@ test "forced operator precedence" {
 
         try testing.expectEqualStrings(t.expected, try program.string(alloc));
     }
+}
+
+test "if expression" {
+    const input = "if (x < y) { x }";
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var lex = Lexer.init(input);
+    var parser = try Parser.init(&lex, alloc);
+
+    const program = try parser.parseProgram() orelse {
+        std.log.warn("parseProgram() returned a null value.\n", .{});
+        return error.NullProgram;
+    };
+    try checkParserErrors(parser);
+
+    const _if = switch (program.statements.items[0].expression.expression.*) {
+        ._if => |v| v,
+        else => return error.NotIfExpression,
+    };
+
+    try testInfixExpression(_if.condition, "x", .lt, "y");
+
+    try testing.expectEqual(1, _if.consequence.statements.items.len);
+
+    const consequence = switch (_if.consequence.statements.items[0]) {
+        .expression => |v| v,
+        else => return error.NotExpressionStatement,
+    };
+
+    try testIdentifier(consequence.expression, "x");
+
+    if (_if.alternative) |_| return error.UnexpectedElseBlock;
+}
+
+test "if-else expression" {
+    const input = "if (left < right) { left } else { right }";
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var lex = Lexer.init(input);
+    var parser = try Parser.init(&lex, alloc);
+
+    const program = try parser.parseProgram() orelse {
+        std.log.warn("parseProgram() returned a null value.\n", .{});
+        return error.NullProgram;
+    };
+    try checkParserErrors(parser);
+
+    const _if = switch (program.statements.items[0].expression.expression.*) {
+        ._if => |v| v,
+        else => return error.NotIfExpression,
+    };
+
+    try testInfixExpression(_if.condition, "left", .lt, "right");
+
+    try testing.expectEqual(1, _if.consequence.statements.items.len);
+
+    const consequence = switch (_if.consequence.statements.items[0]) {
+        .expression => |v| v,
+        else => return error.ConsequenceNotExpressionStatement,
+    };
+
+    try testIdentifier(consequence.expression, "left");
+
+    const alt_block = _if.alternative orelse return error.AlternativeNull;
+
+    const alternative = switch (alt_block.statements.items[0]) {
+        .expression => |v| v,
+        else => return error.AlternativeNotExpressionStatement,
+    };
+
+    try testIdentifier(alternative.expression, "right");
 }

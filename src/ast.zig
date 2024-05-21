@@ -52,7 +52,7 @@ pub const ReturnStatment = struct {
 pub const BlockStatement = struct {
     statements: std.ArrayList(Statement),
 
-    pub fn string(self: BlockStatement, alloc: std.mem.Allocator) ![]const u8 {
+    pub fn string(self: BlockStatement, alloc: std.mem.Allocator) std.fmt.AllocPrintError![]const u8 {
         var block = std.ArrayList(u8).init(alloc);
         defer block.deinit();
 
@@ -139,19 +139,31 @@ pub const Infix = struct {
 
 pub const IfExpression = struct {
     condition: *Expression,
-    consequence: *BlockStatement,
-    alternative: *BlockStatement,
+    consequence: BlockStatement,
+    alternative: ?BlockStatement,
 
     pub fn string(self: IfExpression, alloc: std.mem.Allocator) std.fmt.AllocPrintError![]const u8 {
-        return allocPrint(
+        var out = std.ArrayList(u8).init(alloc);
+        defer out.deinit();
+
+        try out.appendSlice(try allocPrint(
             alloc,
-            "if ({s}) {{ {s} }} else {{ {s} }}",
+            "if ({s}) {{ {s} }}",
             .{
                 try self.condition.string(alloc),
                 try self.consequence.string(alloc),
-                try self.alternative.string(alloc),
             },
-        );
+        ));
+
+        if (self.alternative) |alt| {
+            try out.appendSlice(try allocPrint(
+                alloc,
+                " else {{ {s} }}",
+                .{try alt.string(alloc)},
+            ));
+        }
+
+        return out.toOwnedSlice();
     }
 };
 
