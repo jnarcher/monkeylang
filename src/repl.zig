@@ -1,6 +1,6 @@
 const std = @import("std");
 const Lexer = @import("lexer.zig").Lexer;
-const Token = @import("token.zig").Token;
+const Parser = @import("parser.zig").Parser;
 const io = std.io;
 const print = std.debug.print;
 
@@ -26,9 +26,20 @@ pub fn start(allocator: std.mem.Allocator) !void {
         }
 
         var lex = Lexer.init(s);
-        var tok = lex.nextToken();
-        while (tok != Token.eof) : (tok = lex.nextToken()) {
-            try out.print("{s}\n", .{tok.debugString()});
+        var parser = try Parser.init(&lex, allocator);
+
+        const program = try parser.parseProgram() orelse {
+            try out.print("undefined", .{});
+            continue;
+        };
+
+        if (parser.errors.items.len != 0) {
+            for (try parser.errors.toOwnedSlice()) |err| {
+                try out.print("parser error: \t{s}\n", .{err});
+            }
+            continue;
         }
+
+        try out.print("{s}\n", .{try program.string(allocator)});
     }
 }

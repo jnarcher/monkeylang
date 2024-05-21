@@ -99,7 +99,7 @@ pub const Parser = struct {
     fn peekError(self: *Parser, token: Token) !void {
         const err = try std.fmt.allocPrint(
             self.alloc,
-            "expected next token to be {s}, got {s}",
+            "expected {s}, got {s}",
             .{ token.debugString(), self.peekToken.?.debugString() },
         );
         try self.errors.append(err);

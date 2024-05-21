@@ -90,8 +90,9 @@ pub const Token = union(enum) {
     pub fn debugString(self: Self) []const u8 {
         const alloc = std.heap.page_allocator;
         return switch (self) {
-            .ident, .int => |v| allocPrint(alloc, "Token ({s}) : '{s}'", .{ self.literal(), v }) catch "",
-            else => allocPrint(alloc, "Token ({s})", .{self.literal()}) catch "",
+            .ident => |v| allocPrint(alloc, "Token(IDENT): '{s}'", .{v}) catch "",
+            .int => |v| allocPrint(alloc, "Token(INT): '{s}'", .{v}) catch "",
+            else => allocPrint(alloc, "Token({s})", .{self.literal()}) catch "",
         };
     }
 };
