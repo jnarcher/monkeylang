@@ -227,13 +227,13 @@ pub const Parser = struct {
     }
 
     fn parseIdentifier(self: *Parser) ?*ast.Expression {
-        const exp = self.newExpression() catch return null;
+        const exp = self.newExpression();
         exp.* = .{ .ident = ast.Identifier{ .name = self.currToken.ident } };
         return exp;
     }
 
     fn parseIntLiteral(self: *Parser) ?*ast.Expression {
-        const expr = self.newExpression() catch return null;
+        const expr = self.newExpression();
         expr.* = .{
             .int = .{
                 .value = std.fmt.parseInt(i64, self.currToken.int, 10) catch blk: {
@@ -246,7 +246,7 @@ pub const Parser = struct {
     }
 
     fn parseBoolLiteral(self: *Parser) ?*ast.Expression {
-        const expr = self.newExpression() catch return null;
+        const expr = self.newExpression();
         expr.* = .{
             .boolean = .{
                 .value = self.currToken == Token.true,
@@ -271,11 +271,11 @@ pub const Parser = struct {
 
         self.nextToken();
 
-        var right = self.newExpression() catch return null;
+        var right = self.newExpression();
         right = self.parseExpression(.prefix).?;
 
         prefix.right = right;
-        const expr = self.newExpression() catch return null;
+        const expr = self.newExpression();
         expr.* = ast.Expression{ .prefix = prefix };
         return expr;
     }
@@ -311,7 +311,7 @@ pub const Parser = struct {
 
         lit.body = self.parseBlockStatement() orelse return null;
 
-        const exp = self.newExpression() catch return null;
+        const exp = self.newExpression();
         exp.* = ast.Expression{ .function = lit };
         return exp;
     }
@@ -386,7 +386,7 @@ pub const Parser = struct {
             _if.alternative = self.parseBlockStatement();
         }
 
-        const exp = self.newExpression() catch return null;
+        const exp = self.newExpression();
         exp.* = ast.Expression{ ._if = _if };
         return exp;
     }
@@ -408,7 +408,7 @@ pub const Parser = struct {
     }
 
     fn parseCallExpression(self: *Parser, func_exp: *ast.Expression) ?*ast.Expression {
-        const exp = self.newExpression() catch return null;
+        const exp = self.newExpression();
         exp.* = ast.Expression{
             .call = .{
                 .function = func_exp,
@@ -446,8 +446,9 @@ pub const Parser = struct {
         return args;
     }
 
-    fn newExpression(self: *Parser) !*ast.Expression {
-        return self.alloc.create(ast.Expression);
+    fn newExpression(self: *Parser) *ast.Expression {
+        return self.alloc.create(ast.Expression) catch
+            @panic("unable to create expression");
     }
 
     fn noPrefixParseFnError(self: *Parser, token: Token) !void {
