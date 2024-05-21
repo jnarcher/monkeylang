@@ -12,13 +12,14 @@ pub const Program = struct {
         for (self.statements.items) |stmt| {
             try lines.appendSlice(try stmt.string(alloc));
         }
-        return try lines.toOwnedSlice();
+        return lines.toOwnedSlice();
     }
 };
 
 pub const Statement = union(enum) {
     let: LetStatement,
     _return: ReturnStatment,
+    block: BlockStatement,
     expression: ExpressionStatement,
 
     pub fn string(self: Statement, alloc: std.mem.Allocator) ![]const u8 {
@@ -48,6 +49,21 @@ pub const ReturnStatment = struct {
     }
 };
 
+pub const BlockStatement = struct {
+    statements: std.ArrayList(Statement),
+
+    pub fn string(self: BlockStatement, alloc: std.mem.Allocator) ![]const u8 {
+        var block = std.ArrayList(u8).init(alloc);
+        defer block.deinit();
+
+        for (self.statements.items) |s| {
+            try block.appendSlice(try s.string(alloc));
+        }
+
+        return block.toOwnedSlice();
+    }
+};
+
 pub const ExpressionStatement = struct {
     expression: *Expression,
 
@@ -62,6 +78,7 @@ pub const Expression = union(enum) {
     prefix: Prefix,
     infix: Infix,
     boolean: Boolean,
+    _if: IfExpression,
 
     pub fn string(self: Expression, alloc: std.mem.Allocator) ![]const u8 {
         return switch (self) {
@@ -117,6 +134,24 @@ pub const Infix = struct {
             self.operator.literal(),
             try self.right.string(alloc),
         });
+    }
+};
+
+pub const IfExpression = struct {
+    condition: *Expression,
+    consequence: *BlockStatement,
+    alternative: *BlockStatement,
+
+    pub fn string(self: IfExpression, alloc: std.mem.Allocator) std.fmt.AllocPrintError![]const u8 {
+        return allocPrint(
+            alloc,
+            "if ({s}) {{ {s} }} else {{ {s} }}",
+            .{
+                try self.condition.string(alloc),
+                try self.consequence.string(alloc),
+                try self.alternative.string(alloc),
+            },
+        );
     }
 };
 
