@@ -4,6 +4,10 @@ An interpreter written in Zig for a made up C-like language following the book "
 
 ## As of now...
 
+# NOTE
+
+This project only works with version <0.12.1 of the Zig compiler. As this is a constantly changing language still under development, some things may be broken on newer versions.
+
 Running the command
 
 ```bash
